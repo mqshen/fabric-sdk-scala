@@ -2,9 +2,9 @@ package org.hyperledger.fabric.sdk.events
 
 import java.util.concurrent.Executors
 
-import org.hyperledger.fabric.protos.common.common.{Block, Envelope, Payload}
-import org.hyperledger.fabric.protos.peer.events.Event
+import common.common.{Block, ChannelHeader, Envelope, Payload}
 import org.hyperledger.fabric.sdk.utils.ShutdownableThread
+import protos.events.Event
 
 import scala.collection.mutable
 
@@ -21,7 +21,7 @@ class BlockListener(val name: String, transactionListenerManager: TransactionLis
       val env = Envelope.parseFrom(db.toByteArray)
       val payload = Payload.parseFrom(env.payload.toByteArray)
       val plh = payload.getHeader
-      val txID = plh.getChainHeader.txID
+      val txID = ChannelHeader.parseFrom(plh.channelHeader.toByteArray).txId
       transactionListenerManager.receive(txID, env)
     }
   }
@@ -47,7 +47,7 @@ class BlockListenerManager(chainId: String, chainEventQueue: ChainEventQueue) ex
           val payload = Payload.parseFrom(env.payload.toByteArray)
           val plh = payload.getHeader
 
-          val blockChainID = plh.getChainHeader.chainID
+          val blockChainID = ChannelHeader.parseFrom(plh.channelHeader.toByteArray).channelId//getChainHeader.chainID
 
           if (chainId == blockChainID) {
             val blCopy = new Array[BlockListener](blockListeners.size)

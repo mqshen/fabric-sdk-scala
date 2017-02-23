@@ -2,12 +2,13 @@ package org.hyperledger.fabric.sdk
 
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 
+import common.common.Envelope
 import io.grpc.stub.StreamObserver
 import io.grpc.ManagedChannelBuilder
-import org.hyperledger.fabric.protos.common.common.Envelope
-import org.hyperledger.fabric.protos.orderer.ab.{AtomicBroadcastGrpc, BroadcastResponse}
-import org.hyperledger.fabric.protos.peer.peer.EndorserGrpc
+import orderer.ab.{AtomicBroadcastGrpc, BroadcastResponse}
+import org.hyperledger.fabric.sdk.exceptions.OrdererException
 import org.hyperledger.fabric.sdk.utils.Logging
+import protos.peer.EndorserGrpc
 
 /**
   * Created by goldratio on 21/02/2017.
@@ -36,7 +37,7 @@ class OrdererClient(channelBuilder: ManagedChannelBuilder[_]) extends Logging{
       }
 
       def onError(t: Throwable) {
-        error("broadcase error " + t)
+        error("broadcast error " + t)
         finishLatch.countDown()
       }
       def onCompleted() {
@@ -55,7 +56,9 @@ class OrdererClient(channelBuilder: ManagedChannelBuilder[_]) extends Logging{
         error(e)
       }
     }
-    ret.get
+    ret.getOrElse {
+      throw new OrdererException("failed to connect to orderer")
+    }
   }
 
   override def finalize() {

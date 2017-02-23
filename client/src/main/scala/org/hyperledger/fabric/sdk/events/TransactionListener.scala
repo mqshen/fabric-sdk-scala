@@ -2,7 +2,7 @@ package org.hyperledger.fabric.sdk.events
 
 import java.util.concurrent.atomic.AtomicBoolean
 
-import org.hyperledger.fabric.protos.common.common.Envelope
+import common.common.Envelope
 import org.hyperledger.fabric.sdk.utils.ShutdownableThread
 
 import scala.collection.mutable

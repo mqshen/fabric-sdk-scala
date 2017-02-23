@@ -1,15 +1,15 @@
 package org.hyperledger.fabric.sdk
 
 import com.google.protobuf.ByteString
-import org.hyperledger.fabric.protos.common.common.{Block, Envelope, Payload, Status}
-import org.hyperledger.fabric.protos.peer.chaincode.ChaincodeID
-import org.hyperledger.fabric.protos.peer.proposal.{ChaincodeProposalPayload, Proposal, SignedProposal}
+import common.common.{Envelope, Payload, Status}
 import org.hyperledger.fabric.sdk.ca.{Enrollment, MemberServicesFabricCAImpl}
 import org.hyperledger.fabric.sdk.chaincode.DeploymentProposalRequest
 import org.hyperledger.fabric.sdk.events._
 import org.hyperledger.fabric.sdk.exceptions.InvalidArgumentException
 import org.hyperledger.fabric.sdk.helper.SDKUtil
 import org.hyperledger.fabric.sdk.transaction.{QueryProposalRequest, _}
+import org.hyperledger.protos.chaincode.ChaincodeID
+import protos.proposal.{ChaincodeProposalPayload, Proposal, SignedProposal}
 
 import scala.collection.mutable
 import scala.concurrent.{Future, Promise}
@@ -135,8 +135,8 @@ class Chain(val name: String, clientContext: FabricClient) {
     val proposalResponsePayload = ChaincodeProposalPayload.parseFrom(arg.proposalResponse.payload.toByteArray)
     val proposalTransactionID = arg.transactionID
     FabricClient.instance.userContext.map { userContext =>
-      val transactionPayload = ProtoUtils.payload(proposal, proposalResponsePayload, endorsements)
-      val transactionEnvelope = createTransactionEnvelop(transactionPayload)
+      val transactionEnvelope = ProtoUtils.createSignedTx(proposal, proposalResponsePayload, endorsements, enrollment.get.key.getPrivate)
+      //val transactionEnvelope = createTransactionEnvelop(transactionPayload)
       val promise = registerTxListener(proposalTransactionID)
       var success = false
       orderers.takeWhile(_ => !success).foreach { orderer =>

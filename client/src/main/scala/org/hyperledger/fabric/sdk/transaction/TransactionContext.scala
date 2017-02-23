@@ -33,6 +33,7 @@ class TransactionContext(val transactionID: String, val chain: Chain, user: User
 
   def getNonce: ByteString = {
     //TODO right now the server does not care need to figure out
-    ByteString.copyFromUtf8(SDKUtil.generateUUID)
+    //ByteString.copyFromUtf8(SDKUtil.generateUUID)
+    ByteString.copyFrom(SDKUtil.generateNonce)
   }
 }

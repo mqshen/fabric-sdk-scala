@@ -1,6 +1,7 @@
 package org.hyperledger.fabric.sdk.transaction
 
-import org.hyperledger.fabric.protos.peer.chaincode.ChaincodeID
+import org.hyperledger.protos.chaincode.ChaincodeID
+
 
 /**
   * Created by goldratio on 21/02/2017.

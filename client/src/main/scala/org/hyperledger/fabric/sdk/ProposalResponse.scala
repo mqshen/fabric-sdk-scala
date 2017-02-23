@@ -1,11 +1,11 @@
 package org.hyperledger.fabric.sdk
 
 import com.google.protobuf.InvalidProtocolBufferException
-import org.hyperledger.fabric.protos.msp.identities.SerializedIdentity
-import org.hyperledger.fabric.protos.peer.chaincode.{ChaincodeDeploymentSpec, ChaincodeID, ChaincodeInvocationSpec}
-import org.hyperledger.fabric.protos.peer.proposal.{ChaincodeProposalPayload, Proposal, SignedProposal}
-import org.hyperledger.fabric.protos.peer.proposal_response.ProposalResponse
+import msp.identities.SerializedIdentity
 import org.hyperledger.fabric.sdk.ca.MemberServicesFabricCAImpl
+import org.hyperledger.protos.chaincode.{ChaincodeDeploymentSpec, ChaincodeID, ChaincodeInvocationSpec}
+import protos.proposal.{ChaincodeProposalPayload, Proposal, SignedProposal}
+import protos.proposal_response.ProposalResponse
 
 /**
   * Created by goldratio on 20/02/2017.

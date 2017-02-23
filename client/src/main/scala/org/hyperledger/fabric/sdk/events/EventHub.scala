@@ -1,9 +1,9 @@
 package org.hyperledger.fabric.sdk.events
 
 import io.grpc.stub.StreamObserver
-import org.hyperledger.fabric.protos.peer.events._
 import org.hyperledger.fabric.sdk.communicate.Endpoint
 import org.hyperledger.fabric.sdk.utils.Logging
+import protos.events._
 
 
 /**

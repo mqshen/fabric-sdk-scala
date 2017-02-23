@@ -3,11 +3,11 @@ package org.hyperledger.fabric.sdk
 import java.util.concurrent.TimeUnit
 
 import io.grpc.{ManagedChannelBuilder, StatusRuntimeException}
-import org.hyperledger.fabric.protos.peer.peer.EndorserGrpc
-import org.hyperledger.fabric.protos.peer.proposal.SignedProposal
-import org.hyperledger.fabric.protos.peer.proposal_response.ProposalResponse
 import org.hyperledger.fabric.sdk.exceptions.PeerException
 import org.hyperledger.fabric.sdk.utils.Logging
+import protos.peer.EndorserGrpc
+import protos.proposal.SignedProposal
+import protos.proposal_response.ProposalResponse
 
 /**
   * Created by goldratio on 20/02/2017.

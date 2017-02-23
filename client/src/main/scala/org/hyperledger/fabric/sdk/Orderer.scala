@@ -1,6 +1,6 @@
 package org.hyperledger.fabric.sdk
 
-import org.hyperledger.fabric.protos.common.common.Envelope
+import common.common.Envelope
 import org.hyperledger.fabric.sdk.communicate.Endpoint
 
 /**

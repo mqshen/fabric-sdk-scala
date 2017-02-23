@@ -13,11 +13,13 @@ import org.apache.commons.io.{FileUtils, FilenameUtils, IOUtils}
 import org.bouncycastle.crypto.Digest
 
 import scala.collection.JavaConversions._
+import scala.util.Random
 
 /**
   * Created by goldratio on 17/02/2017.
   */
 object SDKUtil {
+  val NonceSize = 24
 
   def checkGrpcUrl(url: String) = {
     try {
@@ -28,7 +30,6 @@ object SDKUtil {
         false
     }
   }
-
 
   def parseGrpcUrl(url: String) = {
     if (StringUtil.isNullOrEmpty(url)) throw new RuntimeException("URL cannot be null or empty")
@@ -45,6 +46,13 @@ object SDKUtil {
   }
 
   def generateUUID = UUID.randomUUID.toString
+
+  def generateNonce = {
+    //Arra0wy.fill(NonceSize)((scala.util.Random.nextInt(256) - 128).toByte)
+    val arr = new Array[Byte](NonceSize)
+    val nonce = Random.nextBytes(arr)
+    arr
+  }
 
   def combinePaths(first: String, other: String*) = {
     Paths.get(first, other:_*).toString
@@ -74,7 +82,7 @@ object SDKUtil {
       val childrenFiles = org.apache.commons.io.FileUtils.listFiles(sourceDirectory, null, true)
       childrenFiles.remove(destinationArchive)
 
-      childrenFiles.foreach { childFile =>
+      childrenFiles.filter(!_.getName.endsWith("DS_Store")).foreach { childFile =>
         val childPath = childFile.getAbsolutePath
         val relativePath = FilenameUtils.separatorsToUnix(childPath.substring(sourcePath.length + 1, childPath.length))
         val archiveEntry = new TarArchiveEntry(childFile, relativePath)

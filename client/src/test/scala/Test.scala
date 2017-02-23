@@ -1,4 +1,4 @@
-import org.hyperledger.fabric.protos.common.common.Status
+import common.common.Status
 import org.hyperledger.fabric.sdk.chaincode.DeploymentProposalRequest
 import org.hyperledger.fabric.sdk.transaction.{InvokeProposalRequest, QueryProposalRequest}
 import org.hyperledger.fabric.sdk.{ChainCodeResponse, FabricClient, SystemConfig, User}

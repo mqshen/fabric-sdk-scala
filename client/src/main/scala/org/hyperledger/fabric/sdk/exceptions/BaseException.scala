@@ -15,3 +15,5 @@ class EnrollmentException(message: String, cause: Throwable = null) extends Base
 
 class PeerException(message: String, cause: Throwable = null) extends BaseException(message, cause)
 
+class OrdererException(message: String, cause: Throwable = null) extends BaseException(message, cause)
+
