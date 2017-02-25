@@ -132,10 +132,12 @@ class Chain(val name: String, clientContext: FabricClient) {
     val endorsements = proposalResponses.map(_.proposalResponse.endorsement.get)
     val arg = proposalResponses.head
     val proposal = arg.proposal
-    val proposalResponsePayload = ChaincodeProposalPayload.parseFrom(arg.proposalResponse.payload.toByteArray)
+    val proposalResponsePayload = arg.proposalResponse.payload
     val proposalTransactionID = arg.transactionID
     FabricClient.instance.userContext.map { userContext =>
-      val transactionEnvelope = ProtoUtils.createSignedTx(proposal, proposalResponsePayload, endorsements, enrollment.get.key.getPrivate)
+      val transactionContext = TransactionContext(this, userContext, MemberServicesFabricCAImpl.instance.cryptoPrimitives)
+
+      val transactionEnvelope = ProtoUtils.createSignedTx(proposal, proposalResponsePayload, endorsements, enrollment.get.key.getPrivate, transactionContext)
       //val transactionEnvelope = createTransactionEnvelop(transactionPayload)
       val promise = registerTxListener(proposalTransactionID)
       var success = false
@@ -159,7 +161,8 @@ class Chain(val name: String, clientContext: FabricClient) {
 
   def registerTxListener(txid: String) = {
     val promise = Promise[Envelope]()
-    new TransactionListener(txid, promise)
+    val tl = new TransactionListener(txid, promise)
+    transactionListenerManager.addListener(tl)
     promise
   }
 
@@ -174,6 +177,7 @@ class Chain(val name: String, clientContext: FabricClient) {
   def sendProposal(transactionRequest: TransactionRequest, chaincodeID: ChaincodeID) = FabricClient.instance.userContext.map { userContext =>
     val transactionContext = new TransactionContext(SDKUtil.generateUUID, this, userContext, MemberServicesFabricCAImpl.instance.cryptoPrimitives)
     val argList = (Seq(transactionRequest.fcn) ++ transactionRequest.args).map (x => ByteString.copyFrom(x.getBytes) )
+    transactionRequest.context = Some(transactionContext)
     val (proposal, txID) = transactionRequest.createFabricProposal(name, chaincodeID, argList)
     val invokeProposal = getSignedProposal(proposal)
     peers.map { peer =>

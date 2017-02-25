@@ -4,6 +4,7 @@ import java.security.PrivateKey
 
 import com.google.protobuf.{ByteString, CodedInputStream}
 import common.common._
+import msp.identities.SerializedIdentity
 import org.hyperledger.fabric.sdk.ca.MemberServicesFabricCAImpl
 import org.hyperledger.fabric.sdk.utils.StringUtil
 import protos.proposal.{ChaincodeHeaderExtension, ChaincodeProposalPayload, Proposal}
@@ -36,23 +37,26 @@ object ProtoUtils {
     Payload(Some(header), transaction.toByteString)
   }
 
-  def createSignedTx(chaincodeProposal: Proposal, proposalResponsePayload: ChaincodeProposalPayload,
-                     endorsements: Seq[Endorsement], privateKey: PrivateKey) = {
+  def createSignedTx(chaincodeProposal: Proposal, proposalResponsePayload: ByteString,
+                     endorsements: Seq[Endorsement], privateKey: PrivateKey, context: TransactionContext) = {
     val hdr = Header.parseFrom(chaincodeProposal.header.toByteArray)
     val pPayl = ChaincodeProposalPayload.parseFrom(chaincodeProposal.payload.toByteArray)
     //val shdr = SignatureHeader.parseFrom(hdr.signatureHeader.toByteArray)
     //val chdr = ChannelHeader.parseFrom(hdr.channelHeader.toByteArray)
     //val hdrExt = ChaincodeHeaderExtension.parseFrom(chdr.extension.toByteArray)
-    val cea = ChaincodeEndorsedAction(proposalResponsePayload.toByteString, endorsements)
+    val creator = ByteString.copyFromUtf8(context.getCreator)
+    val orderSignatureHeader = SignatureHeader.parseFrom(hdr.signatureHeader.toByteArray)
+    val nonce = orderSignatureHeader.nonce
+    val identity = SerializedIdentity(context.getMSPID(), creator).toByteString
+    val signatureHeader = SignatureHeader(identity, nonce)
+
+    val cea = ChaincodeEndorsedAction(proposalResponsePayload, endorsements)
     val cppNoTransient = ChaincodeProposalPayload(pPayl.input)
-    println("test1:" + StringUtil.toHexString(cppNoTransient.toByteArray))
     val propPayloadBytes = cppNoTransient.toByteString
     val capBytes = ChaincodeActionPayload(propPayloadBytes, Some(cea)).toByteString
-    val transactionAction = TransactionAction(hdr.signatureHeader, capBytes)
-    println("test2:" + StringUtil.toHexString(transactionAction.toByteArray))
+    val transactionAction = TransactionAction(signatureHeader.toByteString, capBytes)
     val transaction = Transaction(actions = Seq(transactionAction))
     val payl = Payload(Some(hdr), transaction.toByteString)
-    println("test3:" + StringUtil.toHexString(payl.toByteArray))
     val sig = MemberServicesFabricCAImpl.instance.cryptoPrimitives.ecdsaSignToBytes(privateKey, payl.toByteArray)
     Envelope(payl.toByteString, ByteString.copyFrom(sig))
   }

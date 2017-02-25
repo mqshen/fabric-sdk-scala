@@ -66,7 +66,8 @@ class DeploymentProposalRequest(deployType: DeploymentProposalRequest.DeployType
           ByteString.copyFrom("deploy", StandardCharsets.UTF_8),
           ByteString.copyFrom("testchainid", StandardCharsets.UTF_8),
           createDeploymentSpec(chaincodeName, args, ByteString.EMPTY, chaincodeDir, chainCodeVerion).toByteString,
-          policy.toByteString,
+          //policy.toByteString,
+          ByteString.copyFrom("DEFAULT", StandardCharsets.UTF_8),
           ByteString.copyFrom("escc", StandardCharsets.UTF_8),
           ByteString.copyFrom("vscc", StandardCharsets.UTF_8)
         )

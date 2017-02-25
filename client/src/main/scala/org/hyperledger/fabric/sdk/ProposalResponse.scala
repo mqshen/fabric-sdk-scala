@@ -10,7 +10,7 @@ import protos.proposal_response.ProposalResponse
 /**
   * Created by goldratio on 20/02/2017.
   */
-class MyProposalResponse(val transactionID: String, val chainCodeID: String, status: Int, message: String,
+class MyProposalResponse(val transactionID: String, val chainCodeID: String, status: Int, val message: String,
                          val proposalResponse: ProposalResponse, signedProposal: SignedProposal)
   extends ChainCodeResponse(transactionID, chainCodeID, status, message) {
   var isVerified = false

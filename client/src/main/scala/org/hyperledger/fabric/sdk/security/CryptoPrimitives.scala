@@ -42,7 +42,7 @@ object CryptoPrimitives {
   // TODO most of these config values should come from genesis block or config
   // file
   val CERTIFICATE_FORMAT = "X.509"
-  val DEFAULT_SIGNATURE_ALGORITHM = "SHA256withECDSA"
+  val DEFAULT_SIGNATURE_ALGORITHM = "SHA3-256WITHECDSA"
 
   def apply( hashAlgorithm: String , securityLevel: Int ): CryptoPrimitives = {
     val cryptoPrimitives = new CryptoPrimitives( hashAlgorithm, securityLevel )
@@ -55,6 +55,13 @@ class CryptoPrimitives(var hashAlgorithm: String, var securityLevel: Int) {
   import CryptoPrimitives._
 
   Security.addProvider(new BouncyCastleProvider)
+//
+//
+//  Security.getProviders().map { provider =>
+//    provider.getServices.filter(_.getType == "Signature").map { al =>
+//      println(al.getAlgorithm)
+//    }
+//  }
 
   var curveName: String = ""
 
@@ -236,7 +243,7 @@ class CryptoPrimitives(var hashAlgorithm: String, var securityLevel: Int) {
   }
 
   def hash(input: Array[Byte]): Array[Byte] = {
-    val digest = getHashDigest
+    val digest = new SHA256Digest
     val retValue = new Array[Byte](digest.getDigestSize)
     digest.update(input, 0, input.length)
     digest.doFinal(retValue, 0)

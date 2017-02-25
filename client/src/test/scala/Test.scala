@@ -1,7 +1,8 @@
-import common.common.Status
+import common.common.{Payload, Status}
 import org.hyperledger.fabric.sdk.chaincode.DeploymentProposalRequest
 import org.hyperledger.fabric.sdk.transaction.{InvokeProposalRequest, QueryProposalRequest}
 import org.hyperledger.fabric.sdk.{ChainCodeResponse, FabricClient, SystemConfig, User}
+import org.hyperledger.protos.chaincode.ChaincodeID
 
 import scala.collection.JavaConversions._
 
@@ -36,18 +37,19 @@ object Test {
     val currentChain = client.getChain(SystemConfig.CHAIN_NAME)
     currentChain.enroll("admin", "adminpw")
 
+    /*
     // install
-//    val installProposalRequest = new DeploymentProposalRequest(DeploymentProposalRequest.Install, CHAIN_CODE_PATH, CHAIN_CODE_NAME, SystemConfig.CHAIN_NAME,
-//      "", Seq.empty)
-//
-//    val responses = chain.sendDeploymentProposal(installProposalRequest)
-//
-//    responses.map { res =>
-//      val successful = res.filter(x => x.isVerified && x.status == ChainCodeResponse.SUCCESS)
-//      val failed = res.filter(x => !x.isVerified || x.status != ChainCodeResponse.SUCCESS)
-//      if(successful.size == 0)
-//        throw new Exception("Not enough endorsers :" + successful.size + ".  " + failed(0).proposalResponse.response.get.message)
-//    }
+    val installProposalRequest = new DeploymentProposalRequest(DeploymentProposalRequest.Install, CHAIN_CODE_PATH, CHAIN_CODE_NAME, SystemConfig.CHAIN_NAME,
+      "", Seq.empty)
+
+    val responses = chain.sendDeploymentProposal(installProposalRequest)
+
+    responses.map { res =>
+      val successful = res.filter(x => x.isVerified && x.status == ChainCodeResponse.SUCCESS)
+      val failed = res.filter(x => !x.isVerified || x.status != ChainCodeResponse.SUCCESS)
+      if(successful.size == 0)
+        throw new Exception("Not enough endorsers :" + successful.size + ".  " + failed(0).proposalResponse.response.get.message)
+    }
 
     // deploy
     val deployProposalRequest = new DeploymentProposalRequest(DeploymentProposalRequest.Instantiate,
@@ -70,23 +72,55 @@ object Test {
           val invokeProposalRequest = new InvokeProposalRequest(CHAIN_CODE_PATH, CHAIN_CODE_NAME,
             chainCodeID, "invoke", Seq("move", "a", "b", "100"))
           chain.sendInvokeProposal(invokeProposalRequest).map { res =>
-            val successful = res.filter(x => x.isVerified && x.status == Status.SUCCESS)
-            val failed = res.filter(x => !x.isVerified || x.status != Status.SUCCESS)
+            val successful = res.filter(x => x.isVerified && x.status == ChainCodeResponse.SUCCESS)
+            val failed = res.filter(x => !x.isVerified || x.status != ChainCodeResponse.SUCCESS)
             if (failed.size > 0)
               throw new Exception("Not enough endorsers :" + successful.size + ".  " + failed(0).proposalResponse.response.get.message)
             chain.sendTransaction(successful).map { x =>
               val queryProposalRequest = new QueryProposalRequest(CHAIN_CODE_PATH, CHAIN_CODE_NAME,
                 chainCodeID, "invoke", Seq("query", "b"))
               chain.sendQueryProposal(queryProposalRequest).map { res =>
-                val successful = res.filter(x => x.isVerified && x.status == Status.SUCCESS)
-                val failed = res.filter(x => !x.isVerified || x.status != Status.SUCCESS)
+                val successful = res.filter(x => x.isVerified && x.status == ChainCodeResponse.SUCCESS)
+                val failed = res.filter(x => !x.isVerified || x.status != ChainCodeResponse.SUCCESS)
                 if (failed.size > 0)
                   throw new Exception("Not enough endorsers :" + successful.size + ".  " + failed(0).proposalResponse.response.get.message)
+                println(res)
+                val balance = successful.head.proposalResponse.response.get.payload.toStringUtf8
+                println(balance)
               }
             }
           }
         }
       }
+    }
+
+*/
+
+    val chainCodeID = ChaincodeID(name = "example", version = "1")
+
+//    val invokeProposalRequest = new InvokeProposalRequest(CHAIN_CODE_PATH, CHAIN_CODE_NAME,
+//      chainCodeID, "invoke", Seq("move", "a", "b", "50"))
+//    chain.sendInvokeProposal(invokeProposalRequest).map { res =>
+//      val successful = res.filter(x => x.isVerified && x.status == ChainCodeResponse.SUCCESS)
+//      val failed = res.filter(x => !x.isVerified || x.status != ChainCodeResponse.SUCCESS)
+//      if (failed.size > 0)
+//        throw new Exception("Not enough endorsers :" + successful.size + ".  " + failed(0).proposalResponse.response.get.message)
+//      chain.sendTransaction(successful).map { x =>
+//        println("success")
+//      }
+//    }
+
+
+    val queryProposalRequest = new QueryProposalRequest(CHAIN_CODE_PATH, CHAIN_CODE_NAME,
+      chainCodeID, "invoke", Seq("query", "a"))
+    chain.sendQueryProposal(queryProposalRequest).map { res =>
+      val successful = res.filter(x => x.isVerified && x.status == ChainCodeResponse.SUCCESS)
+      val failed = res.filter(x => !x.isVerified || x.status != ChainCodeResponse.SUCCESS)
+      if (failed.size > 0)
+        throw new Exception("Not enough endorsers :" + successful.size + ".  " + failed(0).proposalResponse.response.get.message)
+      println(res)
+      val balance = successful.head.proposalResponse.response.get.payload.toStringUtf8
+      println(balance)
     }
   }
 

@@ -24,7 +24,7 @@ class TransactionListener(val txID: String, promise: Promise[Envelope]) {
 class TransactionListenerManager {
   val txListeners  = new mutable.LinkedHashMap[String, mutable.ListBuffer[TransactionListener]]
 
-  private def addListener(txListener: TransactionListener) {
+  def addListener(txListener: TransactionListener) {
     txListeners synchronized {
       val tl = txListeners.get(txListener.txID).getOrElse{
         val list = mutable.ListBuffer.empty[TransactionListener]
