@@ -1,11 +1,13 @@
-import com.google.common.io.BaseEncoding
-import org.hyperledger.fabric.sdk.ca.{MemberServicesFabricCAImpl, RegistrationRequest, UserAttribute}
+import java.io._
+
+import org.hyperledger.fabric.sdk.ca._
 import org.hyperledger.fabric.sdk.chaincode.DeploymentProposalRequest
 import org.hyperledger.fabric.sdk.transaction.{InvokeProposalRequest, QueryProposalRequest}
 import org.hyperledger.fabric.sdk.{ChainCodeResponse, FabricClient, SystemConfig, User}
 import org.hyperledger.protos.chaincode.ChaincodeID
 
 import scala.collection.JavaConversions._
+import scala.collection.mutable
 
 /**
   * Created by goldratio on 17/02/2017.
@@ -14,6 +16,41 @@ object Test {
   val CHAIN_CODE_NAME = "bonusttt"
   val CHAIN_CODE_PATH = "github.com/bonus"
 
+  val members = mutable.Map.empty[String, User]
+
+
+  def enrollUser(name: String, secret: String) = {
+    val user: User = getMember(name)
+    if (!user.isEnrolled) {
+      val req = EnrollmentRequest(name, secret)
+
+      val enrollment = MemberServicesFabricCAImpl.instance.enroll(req)
+      val fileName = SystemConfig.USER_CERT_PATH + name
+      val file = new File(fileName)
+      val oos = new ObjectOutputStream(new FileOutputStream(file))
+      oos.writeObject(enrollment)
+      oos.close()
+
+      user.enrollment = Some(enrollment)
+    }
+    members.put(name, user)
+    user
+  }
+
+  def getMember(name: String) = {
+    members.get(name) match {
+      case Some(user) => user
+      case _ =>
+        val user = new User(name)
+        val fileName = SystemConfig.USER_CERT_PATH + name
+        val file = new File(fileName)
+        if (file.exists()) {
+          val userEnrollment = new ObjectInputStream(new FileInputStream(file)).readObject().asInstanceOf[Enrollment]
+          user.enrollment = Some(userEnrollment)
+        }
+        user
+    }
+  }
 
   def main(args: Array[String]): Unit = {
     val client = FabricClient.instance
@@ -34,24 +71,22 @@ object Test {
     }
 
     chain.initialize()
-    client.userContext = Some(new User("admin", chain))
-
-    val currentChain = client.getChain(SystemConfig.CHAIN_NAME)
+    client.userContext = Some(new User("admin"))
 
     //currentChain.enroll("asset", "assetpw")
 
     //currentChain.enroll("owner", "ownerpw")
 
-    currentChain.enroll("admin", "adminpw")
+    enrollUser("admin", "adminpw")
 
     //val base64Encoder = BaseEncoding.base64()
-    val asset = chain.getMember("admin")
+    val asset = getMember("admin")
     val attrs = UserAttribute("hf.Registrar.DelegateRoles", "client,user")
     val registerUser = "test2"
     val req = RegistrationRequest(registerUser, "client", "org1", Seq(attrs))
     val registerPassword = MemberServicesFabricCAImpl.instance.register(req, asset)
 
-    currentChain.enroll(registerUser, registerPassword)
+    enrollUser(registerUser, registerPassword)
 
 
 //    asset.enrollment.map { e =>
@@ -62,12 +97,13 @@ object Test {
 //      println(publicKey)
 //      println(base64Encoder.encode(address.getBytes))
 //    }
+
     val assetAddress = asset.enrollment.get.cert
 
-//    val owner = chain.getMember("owner")
-//    val ownerAddress = owner.enrollment.get.cert
+    val owner =  getMember("owner")
+    val ownerAddress = owner.enrollment.get.cert
 
-    val admin = chain.getMember("admin")
+    val admin =  getMember("admin")
     def doTransfer(): Unit = {
       val chainCodeID = ChaincodeID(name = CHAIN_CODE_NAME, version = "2")
 
@@ -84,7 +120,6 @@ object Test {
       }
 
       Thread.sleep(30000)
-
 
       val assignProposalRequest = new InvokeProposalRequest(CHAIN_CODE_PATH, CHAIN_CODE_NAME,
         chainCodeID, "assign", Seq("a", ownerAddress, "50", "20171010"))
@@ -160,8 +195,8 @@ object Test {
     def doInstall(): Unit = {
       // install
 
-      val installProposalRequest = new DeploymentProposalRequest(DeploymentProposalRequest.Install, CHAIN_CODE_PATH, CHAIN_CODE_NAME, SystemConfig.CHAIN_NAME,
-        "", Seq.empty)
+      val installProposalRequest = new DeploymentProposalRequest(DeploymentProposalRequest.Install,
+        CHAIN_CODE_PATH, CHAIN_CODE_NAME, SystemConfig.CHAIN_NAME, "", Seq.empty)
 
       val responses = chain.sendDeploymentProposal(installProposalRequest, admin.enrollment.get)
 

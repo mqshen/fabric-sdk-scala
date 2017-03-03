@@ -19,6 +19,7 @@ import org.hyperledger.fabric.sdk.{SystemConfig, User}
 import org.hyperledger.fabric.sdk.security.CryptoPrimitives
 import org.json4s.jackson.Serialization.{read, write}
 
+
 /**
  * Created by goldratio on 17/02/2017.
  */
@@ -38,6 +39,7 @@ class MemberServicesFabricCAImpl(url: String) extends MemberServices {
   implicit val formats = org.json4s.DefaultFormats
 
   var cryptoPrimitives = CryptoPrimitives(SystemConfig.DEFAULT_HASH_ALGORITHM, SystemConfig.DEFAULT_SECURITY_LEVEL)
+
   override def getSecurityLevel: Int = cryptoPrimitives.securityLevel
 
   override def setSecurityLevel(securityLevel: Int): Unit = cryptoPrimitives.securityLevel = securityLevel
@@ -54,13 +56,8 @@ class MemberServicesFabricCAImpl(url: String) extends MemberServices {
       val cert = new String(Base64.getEncoder.encode(enrollment.cert.getBytes))
       val body = new String(Base64.getEncoder.encode(reqBody.getBytes))
       val bodyAndCert = body + "." + cert
-      val bodyByte = instance.cryptoPrimitives.hash(bodyAndCert.getBytes)
-
-
-      println(bodyByte.map("%02X" format _).mkString)
 
       val ecdsaSignature = instance.cryptoPrimitives.ecdsaSignToBytes(enrollment.key.getPrivate, bodyAndCert.getBytes)
-      println(ecdsaSignature.map("%02X" format _).mkString)
       val b64Sign = new String(Base64.getEncoder.encode(ecdsaSignature))
 
       val authToken = cert + "." + b64Sign
@@ -75,9 +72,7 @@ class MemberServicesFabricCAImpl(url: String) extends MemberServices {
   }
 
   override def enroll(req: EnrollmentRequest): Enrollment = {
-    // generate ECDSA keys: signing and encryption keys
     val signingKeyPair: KeyPair = cryptoPrimitives.ecdsaKeyGen()
-    //  KeyPair encryptionKeyPair = cryptoPrimitives.ecdsaKeyGen();
     val user = req.enrollmentID
 
     val csr: PKCS10CertificationRequest = cryptoPrimitives.generateCertificationRequest(user, signingKeyPair)
@@ -141,4 +136,5 @@ class MemberServicesFabricCAImpl(url: String) extends MemberServices {
   override def getTCertBatch(req: GetTCertBatchRequest): Unit = {
 
   }
+
 }

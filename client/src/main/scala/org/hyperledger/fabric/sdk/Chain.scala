@@ -30,7 +30,6 @@ class Chain(val name: String, clientContext: FabricClient) {
   var orderers = Seq.empty[Orderer]
   var eventHubs = Seq.empty[EventHub]
 
-  val members = mutable.Map.empty[String, User]
   val chainEventQueue = new ChainEventQueue()
   val blockListenerManager = new BlockListenerManager(name, chainEventQueue)
   val transactionListenerManager = new TransactionListenerManager
@@ -85,36 +84,6 @@ class Chain(val name: String, clientContext: FabricClient) {
     blockListenerManager.registerBlockListener(blockListener)
   }
 
-  def enroll(name: String, secret: String) = {
-    val user: User = getMember(name)
-    if (!user.isEnrolled) {
-      user.enroll(secret)
-      user.enrollment.foreach { e =>
-        val fileName = SystemConfig.USER_CERT_PATH + name
-        val file = new File(fileName)
-        val oos = new ObjectOutputStream(new FileOutputStream(file))
-        oos.writeObject(e)
-        oos.close()
-      }
-    }
-    members.put(name, user)
-    user
-  }
-
-  def getMember(name: String) = {
-    members.get(name) match {
-      case Some(user) => user
-      case _ =>
-        val user = new User(name, this)
-        val fileName = SystemConfig.USER_CERT_PATH + name
-        val file = new File(fileName)
-        if (file.exists()) {
-          val userEnrollment = new ObjectInputStream(new FileInputStream(file)).readObject().asInstanceOf[Enrollment]
-          user.enrollment = Some(userEnrollment)
-        }
-        user
-    }
-  }
 
   def sendDeploymentProposal(proposalRequest: DeploymentProposalRequest, enrollment: Enrollment) = FabricClient.instance.userContext.map { userContext =>
     val transactionContext = TransactionContext(this, userContext, MemberServicesFabricCAImpl.instance.cryptoPrimitives)
