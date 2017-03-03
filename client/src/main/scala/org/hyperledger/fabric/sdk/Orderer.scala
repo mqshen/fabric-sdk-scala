@@ -4,8 +4,8 @@ import common.common.Envelope
 import org.hyperledger.fabric.sdk.communicate.Endpoint
 
 /**
-  * Created by goldratio on 17/02/2017.
-  */
+ * Created by goldratio on 17/02/2017.
+ */
 case class Orderer(url: String, pem: Option[String] = None, var chain: Option[Chain] = None) {
 
   private[sdk] def setChain(chain: Chain) {

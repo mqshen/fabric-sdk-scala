@@ -1,23 +1,23 @@
 package org.hyperledger.fabric.sdk.helper
 
 import java.io._
-import java.nio.file.{FileVisitOption, Files, Paths}
-import java.util.{Comparator, Properties, UUID}
+import java.nio.file.{ FileVisitOption, Files, Paths }
+import java.util.{ Comparator, Properties, UUID }
 import java.util.regex.Pattern
 
 import com.google.common.io.ByteStreams
 import io.netty.util.internal.StringUtil
-import org.apache.commons.compress.archivers.tar.{TarArchiveEntry, TarArchiveOutputStream}
+import org.apache.commons.compress.archivers.tar.{ TarArchiveEntry, TarArchiveOutputStream }
 import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream
-import org.apache.commons.io.{FileUtils, FilenameUtils, IOUtils}
+import org.apache.commons.io.{ FileUtils, FilenameUtils, IOUtils }
 import org.bouncycastle.crypto.Digest
 
 import scala.collection.JavaConversions._
 import scala.util.Random
 
 /**
-  * Created by goldratio on 17/02/2017.
-  */
+ * Created by goldratio on 17/02/2017.
+ */
 object SDKUtil {
   val NonceSize = 24
 
@@ -55,7 +55,7 @@ object SDKUtil {
   }
 
   def combinePaths(first: String, other: String*) = {
-    Paths.get(first, other:_*).toString
+    Paths.get(first, other: _*).toString
   }
 
   def readFileFromClasspath(fileName: String) = {
@@ -78,7 +78,6 @@ object SDKUtil {
     val archiveOutputStream = new TarArchiveOutputStream(new GzipCompressorOutputStream(new BufferedOutputStream(destinationOutputStream)))
     archiveOutputStream.setLongFileMode(TarArchiveOutputStream.LONGFILE_GNU)
     try {
-
       val childrenFiles = org.apache.commons.io.FileUtils.listFiles(sourceDirectory, null, true)
       childrenFiles.remove(destinationArchive)
 
@@ -95,8 +94,7 @@ object SDKUtil {
           archiveOutputStream.closeArchiveEntry()
         }
       }
-    }
-    finally IOUtils.closeQuietly(archiveOutputStream)
+    } finally IOUtils.closeQuietly(archiveOutputStream)
   }
 
   def readFile(input: File) = {
@@ -107,10 +105,8 @@ object SDKUtil {
     if (file.exists) {
       if (file.isDirectory) {
         FileUtils.deleteDirectory(file)
-      }
-      else file.delete
-    }
-    else throw new RuntimeException("File or directory does not exist")
+      } else file.delete
+    } else throw new RuntimeException("File or directory does not exist")
   }
 
   def hash(input: Array[Byte], digest: Digest): Array[Byte] = {

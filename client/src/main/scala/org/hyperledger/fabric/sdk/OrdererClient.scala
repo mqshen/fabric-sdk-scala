@@ -1,20 +1,20 @@
 package org.hyperledger.fabric.sdk
 
-import java.util.concurrent.{CountDownLatch, TimeUnit}
+import java.util.concurrent.{ CountDownLatch, TimeUnit }
 
 import common.common.Envelope
 import io.grpc.stub.StreamObserver
 import io.grpc.ManagedChannelBuilder
-import orderer.ab.{AtomicBroadcastGrpc, BroadcastResponse}
+import orderer.ab.{ AtomicBroadcastGrpc, BroadcastResponse }
 import org.hyperledger.fabric.sdk.exceptions.OrdererException
 import org.hyperledger.fabric.sdk.utils.Logging
 import protos.peer.EndorserGrpc
 
 /**
-  * Created by goldratio on 21/02/2017.
-  */
+ * Created by goldratio on 21/02/2017.
+ */
 
-class OrdererClient(channelBuilder: ManagedChannelBuilder[_]) extends Logging{
+class OrdererClient(channelBuilder: ManagedChannelBuilder[_]) extends Logging {
   val channel = channelBuilder.build()
   val blockingStub = EndorserGrpc.blockingStub(channel)
 

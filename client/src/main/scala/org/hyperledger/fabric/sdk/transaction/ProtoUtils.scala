@@ -2,22 +2,22 @@ package org.hyperledger.fabric.sdk.transaction
 
 import java.security.PrivateKey
 
-import com.google.protobuf.{ByteString, CodedInputStream}
+import com.google.protobuf.{ ByteString, CodedInputStream }
 import common.common._
 import msp.identities.SerializedIdentity
 import org.hyperledger.fabric.sdk.ca.MemberServicesFabricCAImpl
 import org.hyperledger.fabric.sdk.utils.StringUtil
-import protos.proposal.{ChaincodeHeaderExtension, ChaincodeProposalPayload, Proposal}
+import protos.proposal.{ ChaincodeHeaderExtension, ChaincodeProposalPayload, Proposal }
 import protos.proposal_response.Endorsement
-import protos.transaction.{ChaincodeActionPayload, ChaincodeEndorsedAction, Transaction, TransactionAction}
+import protos.transaction.{ ChaincodeActionPayload, ChaincodeEndorsedAction, Transaction, TransactionAction }
 
 /**
-  * Created by goldratio on 17/02/2017.
-  */
+ * Created by goldratio on 17/02/2017.
+ */
 object ProtoUtils {
 
   def createChannelHeader(`type`: HeaderType, txID: String, chainID: String, epoch: Long,
-                        chaincodeHeaderExtension: ChaincodeHeaderExtension): ChannelHeader = {
+                          chaincodeHeaderExtension: ChaincodeHeaderExtension): ChannelHeader = {
     ChannelHeader(`type`.value, 0, None, chainID, txID, epoch, chaincodeHeaderExtension.toByteString)
   }
 

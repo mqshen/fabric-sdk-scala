@@ -5,10 +5,9 @@ import org.hyperledger.fabric.sdk.communicate.Endpoint
 import org.hyperledger.fabric.sdk.utils.Logging
 import protos.events._
 
-
 /**
-  * Created by goldratio on 21/02/2017.
-  */
+ * Created by goldratio on 21/02/2017.
+ */
 class EventHub(url: String, pem: Option[String], eventQueue: ChainEventQueue) extends Logging {
   var connected = false
   val channel = new Endpoint(url, pem).channelBuilder.build

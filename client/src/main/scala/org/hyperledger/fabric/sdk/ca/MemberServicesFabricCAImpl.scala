@@ -14,23 +14,24 @@ import org.apache.http.impl.client.{BasicAuthCache, BasicCredentialsProvider, Ht
 import org.apache.http.util.EntityUtils
 import org.bouncycastle.pkcs.PKCS10CertificationRequest
 import org.bouncycastle.util.encoders.Hex
-import org.hyperledger.fabric.sdk.exceptions.EnrollmentException
+import org.hyperledger.fabric.sdk.exceptions.{EnrollmentException, RegisterException}
 import org.hyperledger.fabric.sdk.{SystemConfig, User}
 import org.hyperledger.fabric.sdk.security.CryptoPrimitives
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods._
-import org.json4s.jackson.Serialization.read
+import org.json4s.jackson.Serialization.{read, write}
 
 /**
-  * Created by goldratio on 17/02/2017.
-  */
+ * Created by goldratio on 17/02/2017.
+ */
 object MemberServicesFabricCAImpl {
-  val COP_BASEPATH = "/api/v1/cfssl/"
-  val COP_ENROLLMENBASE = COP_BASEPATH + "enroll"
+  val COP_BASE_URL = "/api/v1/cfssl/"
+  val COP_ENROLLMENT_URL= COP_BASE_URL + "enroll"
+  val COP_REGISTER_URL= COP_BASE_URL + "register"
   val instance = new MemberServicesFabricCAImpl(SystemConfig.FABRIC_CA_SERVICES_LOCATION)
 }
 
-case class EnrollResult(result: String, success: Boolean)
+case class EnrollmentResult(result: String, success: Boolean)
+case class RegisterCredential(credential: String)
+case class RegisterResult(result: RegisterCredential, success: Boolean)
 
 class MemberServicesFabricCAImpl(url: String) extends MemberServices {
   import MemberServicesFabricCAImpl._
@@ -46,8 +47,31 @@ class MemberServicesFabricCAImpl(url: String) extends MemberServices {
   override def setHashAlgorithm(hashAlgorithm: String): Unit = cryptoPrimitives.hashAlgorithm = hashAlgorithm
 
   override def register(req: RegistrationRequest, registrar: User): String = {
-    //TODO
-    ""
+    val reqRequest = Map("id" -> req.enrollmentID, "type" -> req.role, "group" -> req.group, "attrs" -> req.attrs)
+    val reqBody = write(reqRequest)
+
+    registrar.enrollment.map { enrollment =>
+      val cert = new String(Base64.getEncoder.encode(enrollment.cert.getBytes))
+      val body = new String(Base64.getEncoder.encode(reqBody.getBytes))
+      val bodyAndCert = body + "." + cert
+      val bodyByte = instance.cryptoPrimitives.hash(bodyAndCert.getBytes)
+
+
+      println(bodyByte.map("%02X" format _).mkString)
+
+      val ecdsaSignature = instance.cryptoPrimitives.ecdsaSignToBytes(enrollment.key.getPrivate, bodyAndCert.getBytes)
+      println(ecdsaSignature.map("%02X" format _).mkString)
+      val b64Sign = new String(Base64.getEncoder.encode(ecdsaSignature))
+
+      val authToken = cert + "." + b64Sign
+      val responseBody: String = httpPost(url + COP_REGISTER_URL, reqBody, authToken)
+
+      val jsonResult = read[RegisterResult](responseBody)
+      if (!jsonResult.success) {
+        throw new RegisterException("COP Failed response success is false. " + jsonResult.result)
+      }
+      jsonResult.result.credential
+    }.getOrElse("")
   }
 
   override def enroll(req: EnrollmentRequest): Enrollment = {
@@ -59,22 +83,19 @@ class MemberServicesFabricCAImpl(url: String) extends MemberServices {
     val csr: PKCS10CertificationRequest = cryptoPrimitives.generateCertificationRequest(user, signingKeyPair)
     val pem: String = cryptoPrimitives.certificationRequestToPEM(csr)
 
+    val json = Map("certificate_request" -> pem)
 
-    val json = ("certificate_request" -> pem)
+    val responseBody: String = httpPost(url + COP_ENROLLMENT_URL, write(json), new UsernamePasswordCredentials(user, req.enrollmentSecret))
 
-    val responseBody: String = httpPost(url + COP_ENROLLMENBASE, compact(render(json)), new UsernamePasswordCredentials(user, req.enrollmentSecret))
-
-    val jsonResult = read[EnrollResult](responseBody)
+    val jsonResult = read[EnrollmentResult](responseBody)
     if (!jsonResult.success) {
-      val e: EnrollmentException = new EnrollmentException("COP Failed response success is false. " + jsonResult.result, new Exception)
-      throw e
+      throw new EnrollmentException("COP Failed response success is false. " + jsonResult.result)
     }
     val b64dec: Base64.Decoder = Base64.getDecoder
     val signedPem: String = new String(b64dec.decode(jsonResult.result.getBytes))
 
     val enrollment: Enrollment = Enrollment(signingKeyPair, signedPem, "", Hex.toHexString(signingKeyPair.getPublic.getEncoded))
     enrollment
-
   }
 
   def httpPost(url: String, body: String, credentials: UsernamePasswordCredentials) = {
@@ -92,8 +113,24 @@ class MemberServicesFabricCAImpl(url: String) extends MemberServices {
     val response: HttpResponse = client.execute(httpPost, context)
     val status: Int = response.getStatusLine.getStatusCode
     val entity: HttpEntity = response.getEntity
-    val responseBody: String = if (entity != null) EntityUtils.toString(entity)
-    else null
+    val responseBody: String = if (entity != null) EntityUtils.toString(entity) else ""
+    if (status >= 400) {
+      val e: Exception = new Exception("POST request to %s failed with status code: %d. Response: %s".format(url, status, responseBody))
+      throw e
+    }
+    responseBody
+  }
+
+  def httpPost(url: String, body: String, token: String) = {
+    val client: HttpClient = HttpClientBuilder.create.build
+    val httpPost: HttpPost = new HttpPost(url)
+    httpPost.addHeader("Authorization", token)
+    val context: HttpClientContext = HttpClientContext.create
+    httpPost.setEntity(new StringEntity(body))
+    val response: HttpResponse = client.execute(httpPost, context)
+    val status: Int = response.getStatusLine.getStatusCode
+    val entity: HttpEntity = response.getEntity
+    val responseBody: String = if (entity != null) EntityUtils.toString(entity) else ""
     if (status >= 400) {
       val e: Exception = new Exception("POST request to %s failed with status code: %d. Response: %s".format(url, status, responseBody))
       throw e

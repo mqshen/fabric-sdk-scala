@@ -6,8 +6,8 @@ import org.hyperledger.fabric.sdk.utils.Logging
 import protos.events.Event
 
 /**
-  * Created by goldratio on 21/02/2017.
-  */
+ * Created by goldratio on 21/02/2017.
+ */
 class ChainEventQueue extends Logging {
   private val events = new LinkedBlockingQueue[Event] //Thread safe
   private var previous = Long.MinValue

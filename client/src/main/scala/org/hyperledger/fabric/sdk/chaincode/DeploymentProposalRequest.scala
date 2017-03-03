@@ -1,21 +1,21 @@
 package org.hyperledger.fabric.sdk.chaincode
 
 import java.io.File
-import java.nio.charset.{Charset, StandardCharsets}
+import java.nio.charset.{ Charset, StandardCharsets }
 
 import com.google.protobuf.ByteString
-import common.msp_principal.{MSPPrincipal, MSPRole}
+import common.msp_principal.{ MSPPrincipal, MSPRole }
 import common.policies.SignaturePolicy.Type.SignedBy
-import common.policies.{Policy, SignaturePolicy, SignaturePolicyEnvelope}
+import common.policies.{ Policy, SignaturePolicy, SignaturePolicyEnvelope }
 import io.netty.util.internal.StringUtil
 import org.hyperledger.fabric.sdk.ca.Certificate
 import org.hyperledger.fabric.sdk.helper.SDKUtil
-import org.hyperledger.fabric.sdk.transaction.{GO_LANG, TransactionRequest, Type}
-import org.hyperledger.protos.chaincode.{ChaincodeDeploymentSpec, ChaincodeID, ChaincodeInput, ChaincodeSpec}
+import org.hyperledger.fabric.sdk.transaction.{ GO_LANG, TransactionRequest, Type }
+import org.hyperledger.protos.chaincode.{ ChaincodeDeploymentSpec, ChaincodeID, ChaincodeInput, ChaincodeSpec }
 
 /**
-  * Created by goldratio on 17/02/2017.
-  */
+ * Created by goldratio on 17/02/2017.
+ */
 object DeploymentProposalRequest {
   val LCCC_CHAIN_NAME = "lccc"
   sealed trait DeployType
@@ -24,14 +24,13 @@ object DeploymentProposalRequest {
 }
 class DeploymentProposalRequest(deployType: DeploymentProposalRequest.DeployType, chaincodePath: String, chaincodeName: String, chaincodeID: String,
                                 fcn: String, args: Seq[String], userCert: Option[Certificate] = None, metadata: Array[Byte] = Array.empty)
-  extends TransactionRequest(chaincodePath, chaincodeName, fcn, args, userCert, metadata) {
+    extends TransactionRequest(chaincodePath, chaincodeName, fcn, args, userCert, metadata) {
   import DeploymentProposalRequest._
-
 
   def toProposal() = {
     val (rootDir, chaincodeDir) = chaincodeLanguage match {
       case GO_LANG =>
-        val goPath = System.getenv ("GOPATH")
+        val goPath = System.getenv("GOPATH")
         if (StringUtil.isNullOrEmpty(goPath)) throw new IllegalArgumentException("[NetMode] Missing GOPATH environment variable")
         (SDKUtil.combinePaths(goPath, "src"), chaincodePath)
       case _ =>
@@ -44,7 +43,7 @@ class DeploymentProposalRequest(deployType: DeploymentProposalRequest.DeployType
     // Create the compressed archive
 
     //SDKUtil.deleteFileOrDirectory(new File(dockerFilePath))
-    val chainCodeVerion = "1"
+    val chainCodeVersion = "2"
 
     val argList = deployType match {
       case Install =>
@@ -56,37 +55,32 @@ class DeploymentProposalRequest(deployType: DeploymentProposalRequest.DeployType
         SDKUtil.deleteFileOrDirectory(new File(targzFilePath))
         Seq[ByteString](
           ByteString.copyFrom("install", StandardCharsets.UTF_8),
-          createDeploymentSpec(chaincodeName, args, ByteString.copyFrom(data), chaincodeDir, chainCodeVerion).toByteString
-        )
+          createDeploymentSpec(chaincodeName, args, ByteString.copyFrom(data), chaincodeDir, chainCodeVersion).toByteString)
       case Instantiate =>
         val principal = MSPPrincipal(principal = MSPRole("DEFAULT").toByteString)
         val t = SignaturePolicy(SignedBy(0))
-        val policy = SignaturePolicyEnvelope(policy=Some(t), identities = Seq(principal))
+        val policy = SignaturePolicyEnvelope(policy = Some(t), identities = Seq(principal))
         Seq[ByteString](
           ByteString.copyFrom("deploy", StandardCharsets.UTF_8),
           ByteString.copyFrom("testchainid", StandardCharsets.UTF_8),
-          createDeploymentSpec(chaincodeName, args, ByteString.EMPTY, chaincodeDir, chainCodeVerion).toByteString,
-          //policy.toByteString,
-          ByteString.copyFrom("DEFAULT", StandardCharsets.UTF_8),
+          createDeploymentSpec(chaincodeName, args, ByteString.EMPTY, chaincodeDir, chainCodeVersion).toByteString,
+          policy.toByteString,
+          //ByteString.copyFrom("DEFAULT", StandardCharsets.UTF_8),
           ByteString.copyFrom("escc", StandardCharsets.UTF_8),
-          ByteString.copyFrom("vscc", StandardCharsets.UTF_8)
-        )
+          ByteString.copyFrom("vscc", StandardCharsets.UTF_8))
     }
 
     val lcccID = ChaincodeID(name = LCCC_CHAIN_NAME)
     createFabricProposal(context.get.chain.name, lcccID, argList)
   }
 
-
   def createDeploymentSpec(name: String, args: Seq[String], codePackage: ByteString,
                            chaincodePath: String, chaincodeVersion: String) = {
     val chaincodeID = ChaincodeID(chaincodePath, name, chaincodeVersion)
 
-
     val inputArgList = if (args.isEmpty) Seq.empty[ByteString] else {
       var argList = Seq(
-        ByteString.copyFrom("Init", Charset.forName("UTF-8"))
-      )
+        ByteString.copyFrom("Init", Charset.forName("UTF-8")))
       args.foreach { arg =>
         argList = argList :+ ByteString.copyFrom(arg.getBytes)
       }
@@ -108,6 +102,5 @@ class DeploymentProposalRequest(deployType: DeploymentProposalRequest.DeployType
         new String(SDKUtil.readFileFromClasspath("Java.Docker"))
     }
   }
-
 
 }

@@ -9,24 +9,24 @@ import scala.collection.mutable
 import scala.concurrent.Promise
 
 /**
-  * Created by goldratio on 22/02/2017.
-  */
+ * Created by goldratio on 22/02/2017.
+ */
 class TransactionListener(val txID: String, promise: Promise[Envelope]) {
   val fired = new AtomicBoolean(false)
 
   def fire(envelope: Envelope) {
     if (!fired.getAndSet(true) && !promise.isCompleted)
-      promise success(envelope)
+      promise success (envelope)
     //es.execute(() -> future.complete(envelope))
   }
 }
 
 class TransactionListenerManager {
-  val txListeners  = new mutable.LinkedHashMap[String, mutable.ListBuffer[TransactionListener]]
+  val txListeners = new mutable.LinkedHashMap[String, mutable.ListBuffer[TransactionListener]]
 
   def addListener(txListener: TransactionListener) {
     txListeners synchronized {
-      val tl = txListeners.get(txListener.txID).getOrElse{
+      val tl = txListeners.get(txListener.txID).getOrElse {
         val list = mutable.ListBuffer.empty[TransactionListener]
         txListeners.update(txListener.txID, list)
         list
@@ -36,12 +36,13 @@ class TransactionListenerManager {
   }
 
   def receive(txID: String, envelope: Envelope) {
-    var txL:Array[TransactionListener] = Array.empty//new Array[TransactionListener](txListeners.size + 2)
+    var txL: Array[TransactionListener] = Array.empty //new Array[TransactionListener](txListeners.size + 2)
     txListeners synchronized {
       txListeners.get(txID).foreach { list =>
         txL = new Array[TransactionListener](list.size + 2)
-        list.zipWithIndex.foreach{case (listener, i) =>
-          txL(i) = listener
+        list.zipWithIndex.foreach {
+          case (listener, i) =>
+            txL(i) = listener
         }
       }
     }

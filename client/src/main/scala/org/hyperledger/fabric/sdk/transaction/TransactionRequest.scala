@@ -1,16 +1,16 @@
 package org.hyperledger.fabric.sdk.transaction
 
 import com.google.protobuf.ByteString
-import common.common.{Header, HeaderType, SignatureHeader}
+import common.common.{ Header, HeaderType, SignatureHeader }
 import msp.identities.SerializedIdentity
-import org.hyperledger.fabric.sdk.ca.{Certificate, MemberServicesFabricCAImpl}
+import org.hyperledger.fabric.sdk.ca.{ Certificate, MemberServicesFabricCAImpl }
 import org.hyperledger.fabric.sdk.utils.StringUtil
-import org.hyperledger.protos.chaincode.{ChaincodeID, ChaincodeInput, ChaincodeInvocationSpec, ChaincodeSpec}
-import protos.proposal.{ChaincodeHeaderExtension, ChaincodeProposalPayload, Proposal}
+import org.hyperledger.protos.chaincode.{ ChaincodeID, ChaincodeInput, ChaincodeInvocationSpec, ChaincodeSpec }
+import protos.proposal.{ ChaincodeHeaderExtension, ChaincodeProposalPayload, Proposal }
 
 /**
-  * Created by goldratio on 17/02/2017.
-  */
+ * Created by goldratio on 17/02/2017.
+ */
 
 sealed trait Type
 case object GO_LANG extends Type
@@ -25,7 +25,6 @@ case class TransactionRequest(chaincodePath: String, chaincodeName: String,
     val chaincodeInvocationSpec = createChaincodeInvocationSpec(chaincodeID, ccType, argList)
     val chaincodeHeaderExtension: ChaincodeHeaderExtension = ChaincodeHeaderExtension(ByteString.EMPTY, Some(chaincodeID))
 
-
     val creator = ByteString.copyFromUtf8(context.get.getCreator)
     val identity = SerializedIdentity(context.get.getMSPID(), creator).toByteString
     val nonce = context.get.getNonce
@@ -36,13 +35,11 @@ case class TransactionRequest(chaincodePath: String, chaincodeName: String,
     //val sigHeaderBldr: SignatureHeader.Builder = SignatureHeader
     val signatureHeader = SignatureHeader(identity, nonce)
 
-
     val header = Header(channelHeader.toByteString, signatureHeader.toByteString)
 
     val payload = ChaincodeProposalPayload(chaincodeInvocationSpec.toByteString)
     (Proposal(header.toByteString, payload.toByteString), txIDHex)
   }
-
 
   def createChaincodeInvocationSpec(chainCodeId: ChaincodeID, langType: ChaincodeSpec.Type, args: Seq[ByteString]) = {
     val chaincodeInput = ChaincodeInput(args)

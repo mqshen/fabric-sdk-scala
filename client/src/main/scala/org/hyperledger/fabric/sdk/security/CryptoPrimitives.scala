@@ -1,24 +1,24 @@
 package org.hyperledger.fabric.sdk.security
 
-import java.io.{BufferedInputStream, ByteArrayInputStream, ByteArrayOutputStream, StringWriter}
+import java.io.{ BufferedInputStream, ByteArrayInputStream, ByteArrayOutputStream, StringWriter }
 import java.math.BigInteger
 import java.security.interfaces.ECPrivateKey
 import java.security._
-import java.security.cert.{Certificate => _, _}
+import java.security.cert.{ Certificate => _, _ }
 import java.security.spec.ECGenParameterSpec
 import javax.security.auth.x500.X500Principal
 
 import io.netty.util.internal.StringUtil
 import org.bouncycastle.asn1.nist.NISTNamedCurves
-import org.bouncycastle.asn1.{ASN1Integer, DERSequenceGenerator}
-import org.bouncycastle.crypto.digests.{SHA256Digest, SHA3Digest}
-import org.bouncycastle.crypto.params.{ECDomainParameters, ECPrivateKeyParameters}
+import org.bouncycastle.asn1.{ ASN1Integer, DERSequenceGenerator }
+import org.bouncycastle.crypto.digests.{ SHA256Digest, SHA3Digest }
+import org.bouncycastle.crypto.params.{ ECDomainParameters, ECPrivateKeyParameters }
 import org.bouncycastle.crypto.signers.ECDSASigner
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 import org.bouncycastle.openssl.jcajce.JcaPEMWriter
 import org.bouncycastle.operator.ContentSigner
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder
-import org.bouncycastle.pkcs.{PKCS10CertificationRequest, PKCS10CertificationRequestBuilder}
+import org.bouncycastle.pkcs.{ PKCS10CertificationRequest, PKCS10CertificationRequestBuilder }
 import org.bouncycastle.pkcs.jcajce.JcaPKCS10CertificationRequestBuilder
 import org.bouncycastle.util.io.pem.PemObject
 import org.hyperledger.fabric.sdk.SystemConfig
@@ -29,8 +29,8 @@ import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 
 /**
-  * Created by goldratio on 17/02/2017.
-  */
+ * Created by goldratio on 17/02/2017.
+ */
 object CryptoPrimitives {
   val SECURITY_PROVIDER: String = BouncyCastleProvider.PROVIDER_NAME
   val ASYMMETRIC_KEY_TYPE: String = "EC"
@@ -42,10 +42,11 @@ object CryptoPrimitives {
   // TODO most of these config values should come from genesis block or config
   // file
   val CERTIFICATE_FORMAT = "X.509"
-  val DEFAULT_SIGNATURE_ALGORITHM = "SHA3-256WITHECDSA"
+  //val DEFAULT_SIGNATURE_ALGORITHM = "SHA3-256WITHECDSA"
+  val DEFAULT_SIGNATURE_ALGORITHM = "SHA256withECDSA"
 
-  def apply( hashAlgorithm: String , securityLevel: Int ): CryptoPrimitives = {
-    val cryptoPrimitives = new CryptoPrimitives( hashAlgorithm, securityLevel )
+  def apply(hashAlgorithm: String, securityLevel: Int): CryptoPrimitives = {
+    val cryptoPrimitives = new CryptoPrimitives(hashAlgorithm, securityLevel)
     cryptoPrimitives.init()
     cryptoPrimitives
   }
@@ -55,13 +56,13 @@ class CryptoPrimitives(var hashAlgorithm: String, var securityLevel: Int) {
   import CryptoPrimitives._
 
   Security.addProvider(new BouncyCastleProvider)
-//
-//
-//  Security.getProviders().map { provider =>
-//    provider.getServices.filter(_.getType == "Signature").map { al =>
-//      println(al.getAlgorithm)
-//    }
-//  }
+  //
+  //
+  //  Security.getProviders().map { provider =>
+  //    provider.getServices.filter(_.getType == "Signature").map { al =>
+  //      println(al.getAlgorithm)
+  //    }
+  //  }
 
   var curveName: String = ""
 
@@ -75,14 +76,13 @@ class CryptoPrimitives(var hashAlgorithm: String, var securityLevel: Int) {
     if (this.securityLevel == 256) {
       this.curveName = "P-256" // Curve that is currently used by FAB services.
       // TODO: HashOutputSize=32 ?
-    }
-    else if (this.securityLevel == 384) {
+    } else if (this.securityLevel == 384) {
       this.curveName = "secp384r1"
       // TODO: HashOutputSize=48 ?
     }
   }
 
-  def ecdsaKeyGen() = generateKey( "ECDSA", this.curveName )
+  def ecdsaKeyGen() = generateKey("ECDSA", this.curveName)
 
   def generateKey(encryptionName: String, curveName: String) = {
     try {
@@ -91,8 +91,7 @@ class CryptoPrimitives(var hashAlgorithm: String, var securityLevel: Int) {
       g.initialize(ecGenSpec, new SecureRandom)
       val pair: KeyPair = g.generateKeyPair
       pair
-    }
-    catch {
+    } catch {
       case exp: Exception => {
         throw new CryptoException("Unable to generate key pair", exp)
       }
@@ -158,7 +157,7 @@ class CryptoPrimitives(var hashAlgorithm: String, var securityLevel: Int) {
 
   def verify(plainText: Array[Byte], signature: Array[Byte], pemCertificate: Array[Byte]) = {
     var isVerified = false
-    if (plainText.isEmpty || signature.isEmpty || pemCertificate.isEmpty ) false
+    if (plainText.isEmpty || signature.isEmpty || pemCertificate.isEmpty) false
     else {
       try {
         val pem = new BufferedInputStream(new ByteArrayInputStream(pemCertificate))
@@ -196,7 +195,7 @@ class CryptoPrimitives(var hashAlgorithm: String, var securityLevel: Int) {
     }
   } // verify
 
-  def validateCertificate (cert: java.security.cert.Certificate): Boolean = {
+  def validateCertificate(cert: java.security.cert.Certificate): Boolean = {
     var isValidated = false
     if (cert == null) return isValidated
     try {

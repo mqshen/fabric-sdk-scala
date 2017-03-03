@@ -4,12 +4,12 @@ import java.io.File
 import javax.net.ssl.SSLException
 
 import io.grpc.ManagedChannelBuilder
-import io.grpc.netty.{GrpcSslContexts, NettyChannelBuilder}
+import io.grpc.netty.{ GrpcSslContexts, NettyChannelBuilder }
 import org.hyperledger.fabric.sdk.helper.SDKUtil._
 
 /**
-  * Created by goldratio on 20/02/2017.
-  */
+ * Created by goldratio on 20/02/2017.
+ */
 class Endpoint(url: String, pem: Option[String] = None) {
   val (addr, port, channelBuilder) = {
     val purl = parseGrpcUrl(url)

@@ -1,10 +1,10 @@
 package org.hyperledger.fabric.sdk
 
-import org.hyperledger.fabric.sdk.ca.{Enrollment, EnrollmentRequest, MemberServicesFabricCAImpl}
+import org.hyperledger.fabric.sdk.ca.{ Enrollment, EnrollmentRequest, MemberServicesFabricCAImpl }
 
 /**
-  * Created by goldratio on 17/02/2017.
-  */
+ * Created by goldratio on 17/02/2017.
+ */
 class User(name: String, chain: Chain) {
   var enrollment: Option[Enrollment] = None
 

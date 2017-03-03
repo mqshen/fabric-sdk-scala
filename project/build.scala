@@ -14,14 +14,14 @@ object Build extends Build {
     .settings(basicSettings: _*)
     .settings(noPublishing: _*)
 
-  lazy val caclient = Project("ca-client", file("ca-client"))
+  lazy val caclient = Project("fabric-ca-client", file("ca-client"))
     .settings(basicSettings: _*)
     .settings(formatSettings: _*)
     .settings(releaseSettings: _*)
     .settings(libraryDependencies ++= Dependencies.all )
     .settings(unmanagedSourceDirectories in Test += baseDirectory.value / "multi-jvm/scala")
 
-  lazy val client = Project("client", file("client"))
+  lazy val client = Project("fabric-client", file("client"))
     .settings(basicSettings: _*)
     .settings(formatSettings: _*)
     .settings(releaseSettings: _*)

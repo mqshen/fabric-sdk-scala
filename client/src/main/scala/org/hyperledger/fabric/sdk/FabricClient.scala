@@ -3,8 +3,8 @@ package org.hyperledger.fabric.sdk
 import org.slf4j.LoggerFactory
 
 /**
-  * Created by goldratio on 17/02/2017.
-  */
+ * Created by goldratio on 17/02/2017.
+ */
 object FabricClient {
   val logger = LoggerFactory.getLogger(getClass)
   val instance = new FabricClient
@@ -31,6 +31,5 @@ class FabricClient {
   }
 
   def getChain(name: String) = chains(name)
-
 
 }

@@ -1,11 +1,11 @@
 package org.hyperledger.fabric.sdk
 
 /**
-  * Created by goldratio on 17/02/2017.
-  */
+ * Created by goldratio on 17/02/2017.
+ */
 object SystemConfig {
   val DEFAULT_SECURITY_LEVEL = 256 //TODO make configurable //Right now by default FAB services is using
-  val DEFAULT_HASH_ALGORITHM = "SHA3"
+  val DEFAULT_HASH_ALGORITHM = "SHA2"
 
   import com.typesafe.config.ConfigFactory
 
@@ -20,4 +20,6 @@ object SystemConfig {
   val FABRIC_CA_SERVICES_LOCATION = config.getString("fabric.ca.server")
 
   val CACERTS = config.getStringList("fabric.ca.cacerts")
+
+  val USER_CERT_PATH = config.getString("fabric.cert.path")
 }
