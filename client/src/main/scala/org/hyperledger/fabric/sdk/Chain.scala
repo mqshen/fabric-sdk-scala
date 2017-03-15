@@ -1,7 +1,5 @@
 package org.hyperledger.fabric.sdk
 
-import java.io._
-
 import com.google.protobuf.ByteString
 import common.common.{ Envelope, Payload, Status }
 import org.hyperledger.fabric.sdk.ca.{ Enrollment, MemberServicesFabricCAImpl }
@@ -11,10 +9,9 @@ import org.hyperledger.fabric.sdk.exceptions.InvalidArgumentException
 import org.hyperledger.fabric.sdk.helper.SDKUtil
 import org.hyperledger.fabric.sdk.transaction.{ QueryProposalRequest, _ }
 import org.hyperledger.protos.chaincode.ChaincodeID
-import protos.proposal.{ ChaincodeProposalPayload, Proposal, SignedProposal }
+import protos.proposal.{ Proposal, SignedProposal }
 
-import scala.collection.mutable
-import scala.concurrent.{ Future, Promise }
+import scala.concurrent.Promise
 
 /**
  * Created by goldratio on 17/02/2017.
@@ -85,20 +82,22 @@ class Chain(val name: String, clientContext: FabricClient) {
   }
 
 
-  def sendDeploymentProposal(proposalRequest: DeploymentProposalRequest, enrollment: Enrollment) = FabricClient.instance.userContext.map { userContext =>
-    val transactionContext = TransactionContext(this, userContext, MemberServicesFabricCAImpl.instance.cryptoPrimitives)
-    proposalRequest.context = Some(transactionContext)
-    val (deploymentProposal, txID) = proposalRequest.toProposal()
-    val signedProposal = getSignedProposal(deploymentProposal, enrollment)
-    val proposalResponses = peers.map { peer =>
-      val fabricResponse = peer.sendProposal(signedProposal)
-      val proposalResponse = new MyProposalResponse(txID,
-        transactionContext.chain.name, fabricResponse.response.get.status,
-        fabricResponse.response.get.message, fabricResponse, signedProposal)
-      proposalResponse.verify()
-      proposalResponse
+  def sendDeploymentProposal(proposalRequest: DeploymentProposalRequest, user: User) = {
+    user.enrollment.map { enrollment =>
+      val transactionContext = TransactionContext(this, user, MemberServicesFabricCAImpl.instance.cryptoPrimitives)
+      proposalRequest.context = Some(transactionContext)
+      val (deploymentProposal, txID) = proposalRequest.toProposal()
+      val signedProposal = getSignedProposal(deploymentProposal, enrollment)
+      val proposalResponses = peers.map { peer =>
+        val fabricResponse = peer.sendProposal(signedProposal)
+        val proposalResponse = new MyProposalResponse(txID,
+          transactionContext.chain.name, fabricResponse.response.get.status,
+          fabricResponse.response.get.message, fabricResponse, signedProposal)
+        proposalResponse.verify()
+        proposalResponse
+      }
+      proposalResponses
     }
-    proposalResponses
   }
 
   def getSignedProposal(deploymentProposal: Proposal, enrollment: Enrollment) = {
@@ -106,15 +105,15 @@ class Chain(val name: String, clientContext: FabricClient) {
     SignedProposal(deploymentProposal.toByteString, ByteString.copyFrom(ecdsaSignature))
   }
 
-  def sendTransaction(proposalResponses: Seq[MyProposalResponse], enrollment: Enrollment) = {
+  def sendTransaction(proposalResponses: Seq[MyProposalResponse], user: User) = {
     if (proposalResponses.size == 0) throw new InvalidArgumentException("sendTransaction proposalResponses size is 0")
     val endorsements = proposalResponses.map(_.proposalResponse.endorsement.get)
     val arg = proposalResponses.head
     val proposal = arg.proposal
     val proposalResponsePayload = arg.proposalResponse.payload
     val proposalTransactionID = arg.transactionID
-    FabricClient.instance.userContext.map { userContext =>
-      val transactionContext = TransactionContext(this, userContext, MemberServicesFabricCAImpl.instance.cryptoPrimitives)
+    user.enrollment.map { enrollment =>
+      val transactionContext = TransactionContext(this, user, MemberServicesFabricCAImpl.instance.cryptoPrimitives)
 
       val transactionEnvelope = ProtoUtils.createSignedTx(proposal, proposalResponsePayload, endorsements, enrollment.key.getPrivate, transactionContext)
       //val transactionEnvelope = createTransactionEnvelop(transactionPayload)
@@ -143,16 +142,16 @@ class Chain(val name: String, clientContext: FabricClient) {
     promise
   }
 
-  def sendQueryProposal(queryProposalRequest: QueryProposalRequest, enrollment: Enrollment) = {
-    sendProposal(queryProposalRequest, queryProposalRequest.chaincodeID, enrollment)
+  def sendQueryProposal(queryProposalRequest: QueryProposalRequest, user: User) = {
+    sendProposal(queryProposalRequest, queryProposalRequest.chaincodeID, user)
   }
 
-  def sendInvokeProposal(invokeProposalRequest: InvokeProposalRequest, enrollment: Enrollment) = {
-    sendProposal(invokeProposalRequest, invokeProposalRequest.chaincodeID, enrollment)
+  def sendInvokeProposal(invokeProposalRequest: InvokeProposalRequest, user: User) = {
+    sendProposal(invokeProposalRequest, invokeProposalRequest.chaincodeID, user)
   }
 
-  def sendProposal(transactionRequest: TransactionRequest, chaincodeID: ChaincodeID, enrollment: Enrollment) = FabricClient.instance.userContext.map { userContext =>
-    val transactionContext = new TransactionContext(SDKUtil.generateUUID, this, userContext, MemberServicesFabricCAImpl.instance.cryptoPrimitives)
+  def sendProposal(transactionRequest: TransactionRequest, chaincodeID: ChaincodeID, user: User) = user.enrollment.map { enrollment =>
+    val transactionContext = new TransactionContext(SDKUtil.generateUUID, this, user, MemberServicesFabricCAImpl.instance.cryptoPrimitives)
     val argList = (Seq(transactionRequest.fcn) ++ transactionRequest.args).map(x => ByteString.copyFrom(x.getBytes))
     transactionRequest.context = Some(transactionContext)
     val (proposal, txID) = transactionRequest.createFabricProposal(name, chaincodeID, argList)

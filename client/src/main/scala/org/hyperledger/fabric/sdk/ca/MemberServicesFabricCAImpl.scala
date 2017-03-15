@@ -30,8 +30,10 @@ object MemberServicesFabricCAImpl {
   val instance = new MemberServicesFabricCAImpl(SystemConfig.FABRIC_CA_SERVICES_LOCATION)
 }
 
-case class EnrollmentResult(result: String, success: Boolean)
-case class RegisterCredential(credential: String)
+case class ServerInfo(CAName: String, CAChain: String)
+case class EnrollmentResponse(Cert: String, ServerInfo: ServerInfo)
+case class EnrollmentResult(result: EnrollmentResponse, success: Boolean)
+case class RegisterCredential(secret: String)
 case class RegisterResult(result: RegisterCredential, success: Boolean)
 
 class MemberServicesFabricCAImpl(url: String) extends MemberServices {
@@ -49,7 +51,7 @@ class MemberServicesFabricCAImpl(url: String) extends MemberServices {
   override def setHashAlgorithm(hashAlgorithm: String): Unit = cryptoPrimitives.hashAlgorithm = hashAlgorithm
 
   override def register(req: RegistrationRequest, registrar: User): String = {
-    val reqRequest = Map("id" -> req.enrollmentID, "type" -> req.role, "group" -> req.group, "attrs" -> req.attrs)
+    val reqRequest = Map("id" -> req.enrollmentID, "type" -> req.role, "affiliation" -> req.affiliation, "attrs" -> req.attrs)
     val reqBody = write(reqRequest)
 
     registrar.enrollment.map { enrollment =>
@@ -67,7 +69,7 @@ class MemberServicesFabricCAImpl(url: String) extends MemberServices {
       if (!jsonResult.success) {
         throw new RegisterException("COP Failed response success is false. " + jsonResult.result)
       }
-      jsonResult.result.credential
+      jsonResult.result.secret
     }.getOrElse("")
   }
 
@@ -82,12 +84,15 @@ class MemberServicesFabricCAImpl(url: String) extends MemberServices {
 
     val responseBody: String = httpPost(url + COP_ENROLLMENT_URL, write(json), new UsernamePasswordCredentials(user, req.enrollmentSecret))
 
+    println(responseBody)
     val jsonResult = read[EnrollmentResult](responseBody)
     if (!jsonResult.success) {
       throw new EnrollmentException("COP Failed response success is false. " + jsonResult.result)
     }
     val b64dec: Base64.Decoder = Base64.getDecoder
-    val signedPem: String = new String(b64dec.decode(jsonResult.result.getBytes))
+    val signedPem: String = new String(b64dec.decode(jsonResult.result.Cert.getBytes))
+    val caPem = b64dec.decode(jsonResult.result.ServerInfo.CAChain.getBytes)
+    println(caPem)
 
     val enrollment: Enrollment = Enrollment(signingKeyPair, signedPem, "", Hex.toHexString(signingKeyPair.getPublic.getEncoded))
     enrollment

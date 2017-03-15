@@ -22,8 +22,10 @@ object DeploymentProposalRequest {
   case object Install extends DeployType
   case object Instantiate extends DeployType
 }
-class DeploymentProposalRequest(deployType: DeploymentProposalRequest.DeployType, chaincodePath: String, chaincodeName: String, chaincodeID: String,
-                                fcn: String, args: Seq[String], userCert: Option[Certificate] = None, metadata: Array[Byte] = Array.empty)
+class DeploymentProposalRequest(deployType: DeploymentProposalRequest.DeployType, chaincodePath: String,
+                                chaincodeName: String, chaincodeID: String, chainCodeVersion: String,
+                                dependency: Seq[String], fcn: String, args: Seq[String],
+                                userCert: Option[Certificate] = None, metadata: Array[Byte] = Array.empty)
     extends TransactionRequest(chaincodePath, chaincodeName, fcn, args, userCert, metadata) {
   import DeploymentProposalRequest._
 
@@ -43,13 +45,11 @@ class DeploymentProposalRequest(deployType: DeploymentProposalRequest.DeployType
     // Create the compressed archive
 
     //SDKUtil.deleteFileOrDirectory(new File(dockerFilePath))
-    val chainCodeVersion = "2"
-
     val argList = deployType match {
       case Install =>
         val projDir = SDKUtil.combinePaths(rootDir, chaincodeDir)
         val targzFilePath = SDKUtil.combinePaths(System.getProperty("java.io.tmpdir"), "deployment-package.tar.gz")
-        SDKUtil.generateTarGz(projDir, targzFilePath)
+        SDKUtil.generateTarGz(projDir, targzFilePath, chaincodeDir, rootDir, dependency)
         val data = SDKUtil.readFile(new File(targzFilePath))
         // Clean up temporary files
         SDKUtil.deleteFileOrDirectory(new File(targzFilePath))

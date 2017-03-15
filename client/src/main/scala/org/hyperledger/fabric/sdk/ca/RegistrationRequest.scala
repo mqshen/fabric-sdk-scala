@@ -9,7 +9,7 @@ import msp.identities.SerializedIdentity
  * Created by goldratio on 17/02/2017.
  */
 case class UserAttribute(name: String, value: String)
-case class RegistrationRequest(enrollmentID: String, role: String, group: String, attrs: Seq[UserAttribute])
+case class RegistrationRequest(enrollmentID: String, role: String, affiliation: String, attrs: Seq[UserAttribute])
 
 case class EnrollmentRequest(enrollmentID: String, enrollmentSecret: String)
 

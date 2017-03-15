@@ -1,5 +1,6 @@
 import java.io._
 
+import com.google.common.io.BaseEncoding
 import org.hyperledger.fabric.sdk.ca._
 import org.hyperledger.fabric.sdk.chaincode.DeploymentProposalRequest
 import org.hyperledger.fabric.sdk.transaction.{InvokeProposalRequest, QueryProposalRequest}
@@ -13,16 +14,23 @@ import scala.collection.mutable
   * Created by goldratio on 17/02/2017.
   */
 object Test {
-  val CHAIN_CODE_NAME = "bonusttt"
-  val CHAIN_CODE_PATH = "github.com/bonus"
+  val CHAIN_CODE_NAME = "bonus"
+  val CHAIN_CODE_PATH = "github.com/chaincode/bonus/"
+  val CHAIN_CODE_VERSION = "2"
+
 
   val members = mutable.Map.empty[String, User]
 
 
-  def enrollUser(name: String, secret: String) = {
+  def enrollUser(name: String, secret: Option[String], register: Option[User] = None) = {
     val user: User = getMember(name)
     if (!user.isEnrolled) {
-      val req = EnrollmentRequest(name, secret)
+      val sec = secret.getOrElse {
+        val attrs = UserAttribute("hf.Registrar.DelegateRoles", "client,user")
+        val req = RegistrationRequest(name, "client", "org1", Seq(attrs))
+        MemberServicesFabricCAImpl.instance.register(req, register.get)
+      }
+      val req = EnrollmentRequest(name, sec)
 
       val enrollment = MemberServicesFabricCAImpl.instance.enroll(req)
       val fileName = SystemConfig.USER_CERT_PATH + name
@@ -77,44 +85,43 @@ object Test {
 
     //currentChain.enroll("owner", "ownerpw")
 
-    enrollUser("admin", "adminpw")
+    val admin = enrollUser("admin", Some("adminpw"))
+
+    admin.enrollment.map { e =>
+      val base64Encoder = BaseEncoding.base64()
+      val privateKey = base64Encoder.encode(e.key.getPrivate.getEncoded)
+      val publicKey = base64Encoder.encode(e.key.getPublic.getEncoded)
+      val address = e.cert
+      println(privateKey)
+      println(publicKey)
+      println(address)
+    }
 
     //val base64Encoder = BaseEncoding.base64()
-    val asset = getMember("admin")
-    val attrs = UserAttribute("hf.Registrar.DelegateRoles", "client,user")
-    val registerUser = "test2"
-    val req = RegistrationRequest(registerUser, "client", "org1", Seq(attrs))
-    val registerPassword = MemberServicesFabricCAImpl.instance.register(req, asset)
+    val asset = enrollUser("asset", None, Some(admin))
+    val owner = enrollUser("owner", None, Some(admin))
+//    val attrs = UserAttribute("hf.Registrar.DelegateRoles", "client,user")
+//    val registerUser = "test4"
+//    val req = RegistrationRequest(registerUser, "client", "org1", Seq(attrs))
+//    val registerPassword = MemberServicesFabricCAImpl.instance.register(req, asset)
 
-    enrollUser(registerUser, registerPassword)
-
-
-//    asset.enrollment.map { e =>
-//      val privateKey = base64Encoder.encode(e.key.getPrivate.getEncoded)
-//      val publicKey = base64Encoder.encode(e.key.getPublic.getEncoded)
-//      val address = e.cert
-//      println(privateKey)
-//      println(publicKey)
-//      println(base64Encoder.encode(address.getBytes))
-//    }
+//    enrollUser(registerUser, registerPassword)
+//    val owner =  getMember(registerUser)
 
     val assetAddress = asset.enrollment.get.cert
-
-    val owner =  getMember("owner")
     val ownerAddress = owner.enrollment.get.cert
 
-    val admin =  getMember("admin")
     def doTransfer(): Unit = {
-      val chainCodeID = ChaincodeID(name = CHAIN_CODE_NAME, version = "2")
+      val chainCodeID = ChaincodeID(name = CHAIN_CODE_NAME, version = CHAIN_CODE_VERSION)
 
       val invokeProposalRequest = new InvokeProposalRequest(CHAIN_CODE_PATH, CHAIN_CODE_NAME,
         chainCodeID, "issue", Seq("a", assetAddress, "5000"))
-      chain.sendInvokeProposal(invokeProposalRequest, owner.enrollment.get).map { res =>
+      chain.sendInvokeProposal(invokeProposalRequest, admin).map { res =>
         val successful = res.filter(x => x.isVerified && x.status == ChainCodeResponse.SUCCESS)
         val failed = res.filter(x => !x.isVerified || x.status != ChainCodeResponse.SUCCESS)
         if (failed.size > 0)
           throw new Exception("Not enough endorsers :" + successful.size + ".  " + failed(0).proposalResponse.response.get.message)
-        chain.sendTransaction(successful, owner.enrollment.get).map { x =>
+        chain.sendTransaction(successful, admin).map { x =>
           println("success")
         }
       }
@@ -123,12 +130,12 @@ object Test {
 
       val assignProposalRequest = new InvokeProposalRequest(CHAIN_CODE_PATH, CHAIN_CODE_NAME,
         chainCodeID, "assign", Seq("a", ownerAddress, "50", "20171010"))
-      chain.sendInvokeProposal(assignProposalRequest, asset.enrollment.get).map { res =>
+      chain.sendInvokeProposal(assignProposalRequest, asset).map { res =>
         val successful = res.filter(x => x.isVerified && x.status == ChainCodeResponse.SUCCESS)
         val failed = res.filter(x => !x.isVerified || x.status != ChainCodeResponse.SUCCESS)
         if (failed.size > 0)
           throw new Exception("Not enough endorsers :" + successful.size + ".  " + failed(0).proposalResponse.response.get.message)
-        chain.sendTransaction(successful, asset.enrollment.get).map { x =>
+        chain.sendTransaction(successful, asset).map { x =>
           println("success")
         }
       }
@@ -137,12 +144,12 @@ object Test {
 
       val transferProposalRequest = new InvokeProposalRequest(CHAIN_CODE_PATH, CHAIN_CODE_NAME,
         chainCodeID, "transfer", Seq("a", assetAddress, "20", "20171001"))
-      chain.sendInvokeProposal(transferProposalRequest, owner.enrollment.get).map { res =>
+      chain.sendInvokeProposal(transferProposalRequest, owner).map { res =>
         val successful = res.filter(x => x.isVerified && x.status == ChainCodeResponse.SUCCESS)
         val failed = res.filter(x => !x.isVerified || x.status != ChainCodeResponse.SUCCESS)
         if (failed.size > 0)
           throw new Exception("Not enough endorsers :" + successful.size + ".  " + failed(0).proposalResponse.response.get.message)
-        chain.sendTransaction(successful, owner.enrollment.get).map { x =>
+        chain.sendTransaction(successful, owner).map { x =>
           println("success")
         }
       }
@@ -150,11 +157,11 @@ object Test {
     }
 
     def doQuery(): Unit = {
-      val chainCodeID = ChaincodeID(name = CHAIN_CODE_NAME, version = "2")
+      val chainCodeID = ChaincodeID(name = CHAIN_CODE_NAME, version = CHAIN_CODE_VERSION)
 
       val queryProposalRequest = new QueryProposalRequest(CHAIN_CODE_PATH, CHAIN_CODE_NAME,
         chainCodeID, "queryOrg", Seq("a"))
-      chain.sendQueryProposal(queryProposalRequest, admin.enrollment.get).map { res =>
+      chain.sendQueryProposal(queryProposalRequest, admin).map { res =>
         val successful = res.filter(x => x.isVerified && x.status == ChainCodeResponse.SUCCESS)
         val failed = res.filter(x => !x.isVerified || x.status != ChainCodeResponse.SUCCESS)
         if (failed.size > 0)
@@ -166,7 +173,7 @@ object Test {
 
       val userQueryProposalRequest = new QueryProposalRequest(CHAIN_CODE_PATH, CHAIN_CODE_NAME,
         chainCodeID, "query", Seq(ownerAddress, "a"))
-      chain.sendQueryProposal(userQueryProposalRequest, admin.enrollment.get).map { res =>
+      chain.sendQueryProposal(userQueryProposalRequest, admin).map { res =>
         val successful = res.filter(x => x.isVerified && x.status == ChainCodeResponse.SUCCESS)
         val failed = res.filter(x => !x.isVerified || x.status != ChainCodeResponse.SUCCESS)
         if (failed.size > 0)
@@ -178,7 +185,7 @@ object Test {
 
       val transferQueryProposalRequest = new QueryProposalRequest(CHAIN_CODE_PATH, CHAIN_CODE_NAME,
         chainCodeID, "query", Seq(assetAddress, "a"))
-      chain.sendQueryProposal(transferQueryProposalRequest, admin.enrollment.get).map { res =>
+      chain.sendQueryProposal(transferQueryProposalRequest, admin).map { res =>
         val successful = res.filter(x => x.isVerified && x.status == ChainCodeResponse.SUCCESS)
         val failed = res.filter(x => !x.isVerified || x.status != ChainCodeResponse.SUCCESS)
         if (failed.size > 0)
@@ -196,9 +203,9 @@ object Test {
       // install
 
       val installProposalRequest = new DeploymentProposalRequest(DeploymentProposalRequest.Install,
-        CHAIN_CODE_PATH, CHAIN_CODE_NAME, SystemConfig.CHAIN_NAME, "", Seq.empty)
+        CHAIN_CODE_PATH, CHAIN_CODE_NAME, SystemConfig.CHAIN_NAME, CHAIN_CODE_VERSION, Seq("github.com/golang/protobuf/"), "", Seq.empty)
 
-      val responses = chain.sendDeploymentProposal(installProposalRequest, admin.enrollment.get)
+      val responses = chain.sendDeploymentProposal(installProposalRequest, admin)
 
       responses.map { res =>
         val successful = res.filter(x => x.isVerified && x.status == ChainCodeResponse.SUCCESS)
@@ -209,10 +216,10 @@ object Test {
 
       // deploy
       val deployProposalRequest = new DeploymentProposalRequest(DeploymentProposalRequest.Instantiate,
-        CHAIN_CODE_PATH, CHAIN_CODE_NAME, SystemConfig.CHAIN_NAME,
+        CHAIN_CODE_PATH, CHAIN_CODE_NAME, SystemConfig.CHAIN_NAME, CHAIN_CODE_VERSION, Seq(""),
         "", Seq("a", "100", "b", "200"))
 
-      val deployResponses = chain.sendDeploymentProposal(deployProposalRequest, admin.enrollment.get)
+      val deployResponses = chain.sendDeploymentProposal(deployProposalRequest, admin)
 
       import scala.concurrent.ExecutionContext.Implicits.global
 
@@ -222,7 +229,7 @@ object Test {
         val failed = res.filter(x => !x.isVerified || x.status != ChainCodeResponse.SUCCESS)
         if (successful.size == 0)
           throw new Exception("Not enough endorsers :" + successful.size + ".  " + failed(0).proposalResponse.response.get.message)
-        chain.sendTransaction(successful, admin.enrollment.get).map { x =>
+        chain.sendTransaction(successful, admin).map { x =>
           x.future.onSuccess { case _ =>
               println("deploy success")
           }
@@ -233,7 +240,7 @@ object Test {
 
     //doInstall()
     //doTransfer()
-    //doQuery()
+    doQuery()
 
   }
 

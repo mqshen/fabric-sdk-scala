@@ -20,6 +20,7 @@ import scala.util.Random
  */
 object SDKUtil {
   val NonceSize = 24
+  val ignoreFileNames = Seq(".idea", "DS_Store")
 
   def checkGrpcUrl(url: String) = {
     try {
@@ -70,30 +71,54 @@ object SDKUtil {
     }
   }
 
-  def generateTarGz(src: String, target: String) = {
-    val sourceDirectory = new File(src)
-    val destinationArchive = new File(target)
+  def addFileToTarGz(rootDir: String, file: String, archiveOutputStream: TarArchiveOutputStream) = {
+    val sourceDirectory = new File(file)
     val sourcePath = sourceDirectory.getAbsolutePath
+    val childrenFiles = org.apache.commons.io.FileUtils.listFiles(sourceDirectory, null, true)
+    childrenFiles.filter{x => ignoreFileNames.filter(y => x.getAbsolutePath.contains(y)).size == 0}.foreach { childFile =>
+      val childPath = childFile.getAbsolutePath
+      val relativePath = "src/" + rootDir + FilenameUtils.separatorsToUnix(childPath.substring(sourcePath.length + 1, childPath.length))
+      val archiveEntry = new TarArchiveEntry(childFile, relativePath)
+      val fileInputStream = new FileInputStream(childFile)
+      archiveOutputStream.putArchiveEntry(archiveEntry)
+      try
+        IOUtils.copy(fileInputStream, archiveOutputStream)
+      finally {
+        IOUtils.closeQuietly(fileInputStream)
+        archiveOutputStream.closeArchiveEntry()
+      }
+    }
+  }
+
+  def generateTarGz(src: String, target: String, chaincodeDir: String, rootDir: String, dependency: Seq[String]) = {
+    //val sourceDirectory = new File(src)
+    val destinationArchive = new File(target)
+    //val sourcePath = sourceDirectory.getAbsolutePath
     val destinationOutputStream = new FileOutputStream(destinationArchive)
     val archiveOutputStream = new TarArchiveOutputStream(new GzipCompressorOutputStream(new BufferedOutputStream(destinationOutputStream)))
     archiveOutputStream.setLongFileMode(TarArchiveOutputStream.LONGFILE_GNU)
     try {
-      val childrenFiles = org.apache.commons.io.FileUtils.listFiles(sourceDirectory, null, true)
-      childrenFiles.remove(destinationArchive)
-
-      childrenFiles.filter(!_.getName.endsWith("DS_Store")).foreach { childFile =>
-        val childPath = childFile.getAbsolutePath
-        val relativePath = FilenameUtils.separatorsToUnix(childPath.substring(sourcePath.length + 1, childPath.length))
-        val archiveEntry = new TarArchiveEntry(childFile, relativePath)
-        val fileInputStream = new FileInputStream(childFile)
-        archiveOutputStream.putArchiveEntry(archiveEntry)
-        try
-          IOUtils.copy(fileInputStream, archiveOutputStream)
-        finally {
-          IOUtils.closeQuietly(fileInputStream)
-          archiveOutputStream.closeArchiveEntry()
-        }
+      //val childrenFiles = org.apache.commons.io.FileUtils.listFiles(sourceDirectory, null, true)
+      //childrenFiles.remove(destinationArchive)
+      dependency.foreach { dep =>
+        val depFile = SDKUtil.combinePaths(rootDir, dep)
+        addFileToTarGz(dep, depFile, archiveOutputStream)
       }
+
+      addFileToTarGz(chaincodeDir, src, archiveOutputStream)
+//      childrenFiles.filter{x => ignoreFileNames.filter(y => x.getAbsolutePath.contains(y)).size == 0}.foreach { childFile =>
+//        val childPath = childFile.getAbsolutePath
+//        val relativePath = "src/" + chaincodeDir + FilenameUtils.separatorsToUnix(childPath.substring(sourcePath.length + 1, childPath.length))
+//        val archiveEntry = new TarArchiveEntry(childFile, relativePath)
+//        val fileInputStream = new FileInputStream(childFile)
+//        archiveOutputStream.putArchiveEntry(archiveEntry)
+//        try
+//          IOUtils.copy(fileInputStream, archiveOutputStream)
+//        finally {
+//          IOUtils.closeQuietly(fileInputStream)
+//          archiveOutputStream.closeArchiveEntry()
+//        }
+//      }
     } finally IOUtils.closeQuietly(archiveOutputStream)
   }
 
