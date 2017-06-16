@@ -1,9 +1,9 @@
 package org.hyperledger.fabric.sdk.events
 
 import io.grpc.stub.StreamObserver
+import org.hyperledger.fabric.protos.peer.events._
 import org.hyperledger.fabric.sdk.communicate.Endpoint
 import org.hyperledger.fabric.sdk.utils.Logging
-import protos.events._
 
 /**
  * Created by goldratio on 21/02/2017.
@@ -12,7 +12,7 @@ class EventHub(url: String, pem: Option[String], eventQueue: ChainEventQueue) ex
   var connected = false
   val channel = new Endpoint(url, pem).channelBuilder.build
   val events: EventsGrpc.EventsStub = EventsGrpc.stub(channel)
-  var sender: StreamObserver[Event] = null
+  var sender: StreamObserver[SignedEvent] = null
 
   def connect() {
     if (connected) {
@@ -39,7 +39,7 @@ class EventHub(url: String, pem: Option[String], eventQueue: ChainEventQueue) ex
 
   def blockListener() {
     val register = Event.Event.Register(Register(Seq(Interest(EventType.BLOCK))))
-    val blockEvent = Event(event = register)
+    val blockEvent = SignedEvent() // Event(event = register)
     sender.onNext(blockEvent)
   }
 }

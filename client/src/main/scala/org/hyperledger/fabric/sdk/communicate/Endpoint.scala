@@ -17,9 +17,11 @@ class Endpoint(url: String, pem: Option[String] = None) {
     val addr = purl.getProperty("host")
     val port = Integer.parseInt(purl.getProperty("port"))
 
-    val channelBuilder: ManagedChannelBuilder[_] = if (protocol.equalsIgnoreCase("grpc"))
-      ManagedChannelBuilder.forAddress(addr, port).usePlaintext(true)
-    else if (protocol.equalsIgnoreCase("grpcs")) {
+    val channelBuilder: ManagedChannelBuilder[_] = if (protocol.equalsIgnoreCase("grpc")) {
+      val channelBuilder = ManagedChannelBuilder.forAddress(addr, port)
+      channelBuilder.usePlaintext(true)
+      channelBuilder
+    } else if (protocol.equalsIgnoreCase("grpcs")) {
       pem.map { pem =>
         try {
           val sslContext = GrpcSslContexts.forClient.trustManager(new File(pem)).build
@@ -33,6 +35,12 @@ class Endpoint(url: String, pem: Option[String] = None) {
         ManagedChannelBuilder.forAddress(addr, port)
       }
     } else throw new RuntimeException("invalid protocol: " + protocol)
+    channelBuilder.maxInboundMessageSize(20971520)
+    //    channelBuilder match {
+    //      case nettyBuilder: NettyChannelBuilder =>
+    //        nettyBuilder.maxHeaderListSize(Int.MaxValue)
+    //      case _ =>
+    //    }
     (addr, port, channelBuilder)
   }
 

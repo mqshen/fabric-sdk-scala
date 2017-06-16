@@ -75,7 +75,7 @@ object SDKUtil {
     val sourceDirectory = new File(file)
     val sourcePath = sourceDirectory.getAbsolutePath
     val childrenFiles = org.apache.commons.io.FileUtils.listFiles(sourceDirectory, null, true)
-    childrenFiles.filter{x => ignoreFileNames.filter(y => x.getAbsolutePath.contains(y)).size == 0}.foreach { childFile =>
+    childrenFiles.filter { x => ignoreFileNames.filter(y => x.getAbsolutePath.contains(y)).size == 0 }.foreach { childFile =>
       val childPath = childFile.getAbsolutePath
       val relativePath = "src/" + rootDir + FilenameUtils.separatorsToUnix(childPath.substring(sourcePath.length + 1, childPath.length))
       val archiveEntry = new TarArchiveEntry(childFile, relativePath)
@@ -106,19 +106,19 @@ object SDKUtil {
       }
 
       addFileToTarGz(chaincodeDir, src, archiveOutputStream)
-//      childrenFiles.filter{x => ignoreFileNames.filter(y => x.getAbsolutePath.contains(y)).size == 0}.foreach { childFile =>
-//        val childPath = childFile.getAbsolutePath
-//        val relativePath = "src/" + chaincodeDir + FilenameUtils.separatorsToUnix(childPath.substring(sourcePath.length + 1, childPath.length))
-//        val archiveEntry = new TarArchiveEntry(childFile, relativePath)
-//        val fileInputStream = new FileInputStream(childFile)
-//        archiveOutputStream.putArchiveEntry(archiveEntry)
-//        try
-//          IOUtils.copy(fileInputStream, archiveOutputStream)
-//        finally {
-//          IOUtils.closeQuietly(fileInputStream)
-//          archiveOutputStream.closeArchiveEntry()
-//        }
-//      }
+      //      childrenFiles.filter{x => ignoreFileNames.filter(y => x.getAbsolutePath.contains(y)).size == 0}.foreach { childFile =>
+      //        val childPath = childFile.getAbsolutePath
+      //        val relativePath = "src/" + chaincodeDir + FilenameUtils.separatorsToUnix(childPath.substring(sourcePath.length + 1, childPath.length))
+      //        val archiveEntry = new TarArchiveEntry(childFile, relativePath)
+      //        val fileInputStream = new FileInputStream(childFile)
+      //        archiveOutputStream.putArchiveEntry(archiveEntry)
+      //        try
+      //          IOUtils.copy(fileInputStream, archiveOutputStream)
+      //        finally {
+      //          IOUtils.closeQuietly(fileInputStream)
+      //          archiveOutputStream.closeArchiveEntry()
+      //        }
+      //      }
     } finally IOUtils.closeQuietly(archiveOutputStream)
   }
 

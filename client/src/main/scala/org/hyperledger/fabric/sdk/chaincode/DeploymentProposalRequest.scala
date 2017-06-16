@@ -1,23 +1,25 @@
 package org.hyperledger.fabric.sdk.chaincode
 
 import java.io.File
-import java.nio.charset.{ Charset, StandardCharsets }
+import java.nio.charset.{Charset, StandardCharsets}
 
 import com.google.protobuf.ByteString
-import common.msp_principal.{ MSPPrincipal, MSPRole }
-import common.policies.SignaturePolicy.Type.SignedBy
-import common.policies.{ Policy, SignaturePolicy, SignaturePolicyEnvelope }
 import io.netty.util.internal.StringUtil
+import org.hyperledger.fabric.protos.common.msp_principal.{MSPPrincipal, MSPRole}
+import org.hyperledger.fabric.protos.common.policies.SignaturePolicy.Type.SignedBy
+import org.hyperledger.fabric.protos.common.policies.SignaturePolicy.{NOutOf, Type}
+import org.hyperledger.fabric.protos.common.policies.{SignaturePolicy, SignaturePolicyEnvelope}
+import org.hyperledger.fabric.protos.peer.chaincode.{ChaincodeDeploymentSpec, ChaincodeID, ChaincodeInput, ChaincodeSpec}
+import org.hyperledger.fabric.sdk.SystemConfig
 import org.hyperledger.fabric.sdk.ca.Certificate
 import org.hyperledger.fabric.sdk.helper.SDKUtil
-import org.hyperledger.fabric.sdk.transaction.{ GO_LANG, TransactionRequest, Type }
-import org.hyperledger.protos.chaincode.{ ChaincodeDeploymentSpec, ChaincodeID, ChaincodeInput, ChaincodeSpec }
+import org.hyperledger.fabric.sdk.transaction.{GO_LANG, TransactionRequest}
 
 /**
  * Created by goldratio on 17/02/2017.
  */
 object DeploymentProposalRequest {
-  val LCCC_CHAIN_NAME = "lccc"
+  val LCCC_CHAIN_NAME = "lscc"
   sealed trait DeployType
   case object Install extends DeployType
   case object Instantiate extends DeployType
@@ -57,12 +59,14 @@ class DeploymentProposalRequest(deployType: DeploymentProposalRequest.DeployType
           ByteString.copyFrom("install", StandardCharsets.UTF_8),
           createDeploymentSpec(chaincodeName, args, ByteString.copyFrom(data), chaincodeDir, chainCodeVersion).toByteString)
       case Instantiate =>
-        val principal = MSPPrincipal(principal = MSPRole("DEFAULT").toByteString)
+        val principal = MSPPrincipal(principal = MSPRole(SystemConfig.MSPID).toByteString)
+//        val twoSignedBy = SignaturePolicy(SignedBy(0))  //index 表示在identities数组中的位置
+//        val t = SignaturePolicy(Type.NOutOf(NOutOf(2, Seq(twoSignedBy))))  //index 表示在identities数组中的位置
         val t = SignaturePolicy(SignedBy(0))
         val policy = SignaturePolicyEnvelope(policy = Some(t), identities = Seq(principal))
         Seq[ByteString](
           ByteString.copyFrom("deploy", StandardCharsets.UTF_8),
-          ByteString.copyFrom("testchainid", StandardCharsets.UTF_8),
+          ByteString.copyFrom(SystemConfig.CHAIN_NAME, StandardCharsets.UTF_8),
           createDeploymentSpec(chaincodeName, args, ByteString.EMPTY, chaincodeDir, chainCodeVersion).toByteString,
           policy.toByteString,
           //ByteString.copyFrom("DEFAULT", StandardCharsets.UTF_8),

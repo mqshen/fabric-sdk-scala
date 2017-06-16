@@ -8,6 +8,6 @@ addSbtPlugin("pl.project13.scala" % "sbt-jmh" % "0.2.2")
 
 addSbtPlugin("org.xerial.sbt" % "sbt-pack" % "0.8.0")
 
-addSbtPlugin("com.thesamet" % "sbt-protoc" % "0.99.3")
+addSbtPlugin("com.thesamet" % "sbt-protoc" % "0.99.8")
 
-libraryDependencies += "com.trueaccord.scalapb" %% "compilerplugin" % "0.5.47"
+libraryDependencies += "com.trueaccord.scalapb" %% "compilerplugin" % "0.6.0-pre4"

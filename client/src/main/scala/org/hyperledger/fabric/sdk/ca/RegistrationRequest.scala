@@ -3,7 +3,8 @@ package org.hyperledger.fabric.sdk.ca
 import java.security.KeyPair
 
 import com.google.protobuf.ByteString
-import msp.identities.SerializedIdentity
+import org.hyperledger.fabric.protos.msp.identities.SerializedIdentity
+import org.hyperledger.fabric.sdk.SystemConfig
 
 /**
  * Created by goldratio on 17/02/2017.
@@ -14,7 +15,7 @@ case class RegistrationRequest(enrollmentID: String, role: String, affiliation: 
 case class EnrollmentRequest(enrollmentID: String, enrollmentSecret: String)
 
 case class Enrollment(key: KeyPair, cert: String, chainKey: String, publicKey: String) {
-  def getMSPID = "DEFAULT" //TODO what will this be ?
+  def getMSPID = SystemConfig.MSPID //TODO what will this be ?
 
   def getAddress() = {
     val creator = ByteString.copyFromUtf8(cert)

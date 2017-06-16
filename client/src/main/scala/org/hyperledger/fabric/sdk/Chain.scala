@@ -1,15 +1,15 @@
 package org.hyperledger.fabric.sdk
 
 import com.google.protobuf.ByteString
-import common.common.{ Envelope, Payload, Status }
+import org.hyperledger.fabric.protos.common.common.{ Envelope, Payload, Status }
+import org.hyperledger.fabric.protos.peer.chaincode.ChaincodeID
+import org.hyperledger.fabric.protos.peer.proposal.{ Proposal, SignedProposal }
 import org.hyperledger.fabric.sdk.ca.{ Enrollment, MemberServicesFabricCAImpl }
 import org.hyperledger.fabric.sdk.chaincode.DeploymentProposalRequest
 import org.hyperledger.fabric.sdk.events._
 import org.hyperledger.fabric.sdk.exceptions.InvalidArgumentException
 import org.hyperledger.fabric.sdk.helper.SDKUtil
 import org.hyperledger.fabric.sdk.transaction.{ QueryProposalRequest, _ }
-import org.hyperledger.protos.chaincode.ChaincodeID
-import protos.proposal.{ Proposal, SignedProposal }
 
 import scala.concurrent.Promise
 
@@ -67,9 +67,9 @@ class Chain(val name: String, clientContext: FabricClient) {
       // assume this makes no sense.  have no orders seems reasonable if all you do is query.
       throw new InvalidArgumentException("Chain needs at least one peer.")
     }
-    runEventQueue()
-    eventHubs.foreach(_.connect())
-    registerBlockListener()
+    //runEventQueue()
+    //eventHubs.foreach(_.connect())
+    //registerBlockListener()
   }
 
   def runEventQueue() = {
@@ -80,7 +80,6 @@ class Chain(val name: String, clientContext: FabricClient) {
     val blockListener = new BlockListener("block-listener", transactionListenerManager)
     blockListenerManager.registerBlockListener(blockListener)
   }
-
 
   def sendDeploymentProposal(proposalRequest: DeploymentProposalRequest, user: User) = {
     user.enrollment.map { enrollment =>

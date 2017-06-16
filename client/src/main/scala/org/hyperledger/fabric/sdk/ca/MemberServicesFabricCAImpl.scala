@@ -3,30 +3,29 @@ package org.hyperledger.fabric.sdk.ca
 import java.security.KeyPair
 import java.util.Base64
 
-import org.apache.http.{HttpEntity, HttpHost, HttpResponse}
-import org.apache.http.auth.{AuthScope, UsernamePasswordCredentials}
-import org.apache.http.client.{AuthCache, CredentialsProvider, HttpClient}
+import org.apache.http.{ HttpEntity, HttpHost, HttpResponse }
+import org.apache.http.auth.{ AuthScope, UsernamePasswordCredentials }
+import org.apache.http.client.{ AuthCache, CredentialsProvider, HttpClient }
 import org.apache.http.client.methods.HttpPost
 import org.apache.http.client.protocol.HttpClientContext
 import org.apache.http.entity.StringEntity
 import org.apache.http.impl.auth.BasicScheme
-import org.apache.http.impl.client.{BasicAuthCache, BasicCredentialsProvider, HttpClientBuilder}
+import org.apache.http.impl.client.{ BasicAuthCache, BasicCredentialsProvider, HttpClientBuilder }
 import org.apache.http.util.EntityUtils
 import org.bouncycastle.pkcs.PKCS10CertificationRequest
 import org.bouncycastle.util.encoders.Hex
-import org.hyperledger.fabric.sdk.exceptions.{EnrollmentException, RegisterException}
-import org.hyperledger.fabric.sdk.{SystemConfig, User}
+import org.hyperledger.fabric.sdk.exceptions.{ EnrollmentException, RegisterException }
+import org.hyperledger.fabric.sdk.{ SystemConfig, User }
 import org.hyperledger.fabric.sdk.security.CryptoPrimitives
-import org.json4s.jackson.Serialization.{read, write}
-
+import org.json4s.jackson.Serialization.{ read, write }
 
 /**
  * Created by goldratio on 17/02/2017.
  */
 object MemberServicesFabricCAImpl {
-  val COP_BASE_URL = "/api/v1/cfssl/"
-  val COP_ENROLLMENT_URL= COP_BASE_URL + "enroll"
-  val COP_REGISTER_URL= COP_BASE_URL + "register"
+  val COP_BASE_URL = "/"
+  val COP_ENROLLMENT_URL = COP_BASE_URL + "enroll"
+  val COP_REGISTER_URL = COP_BASE_URL + "register"
   val instance = new MemberServicesFabricCAImpl(SystemConfig.FABRIC_CA_SERVICES_LOCATION)
 }
 

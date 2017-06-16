@@ -195,7 +195,7 @@ object Dependencies {
     "org.slf4j" % "slf4j-api" % slf4jVersion,
     "org.slf4j" % "slf4j-log4j12" % slf4jVersion,
     "org.clapper" %% "grizzled-slf4j" % "1.0.4",
-    "io.grpc" % "grpc-netty" % "1.0.3",
+    "io.grpc" % "grpc-netty" % "1.2.0",
     "com.trueaccord.scalapb" %% "scalapb-runtime-grpc" % com.trueaccord.scalapb.compiler.Version.scalapbVersion,
     "com.typesafe" % "config" % "1.3.0",
     "org.bouncycastle" % "bcprov-jdk15on" % bcVersion,

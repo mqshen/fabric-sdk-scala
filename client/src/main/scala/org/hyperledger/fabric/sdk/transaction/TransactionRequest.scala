@@ -1,12 +1,12 @@
 package org.hyperledger.fabric.sdk.transaction
 
 import com.google.protobuf.ByteString
-import common.common.{ Header, HeaderType, SignatureHeader }
-import msp.identities.SerializedIdentity
+import org.hyperledger.fabric.protos.common.common.{ Header, HeaderType, SignatureHeader }
+import org.hyperledger.fabric.protos.msp.identities.SerializedIdentity
+import org.hyperledger.fabric.protos.peer.chaincode.{ ChaincodeID, ChaincodeInput, ChaincodeInvocationSpec, ChaincodeSpec }
+import org.hyperledger.fabric.protos.peer.proposal.{ ChaincodeHeaderExtension, ChaincodeProposalPayload, Proposal }
 import org.hyperledger.fabric.sdk.ca.{ Certificate, MemberServicesFabricCAImpl }
 import org.hyperledger.fabric.sdk.utils.StringUtil
-import org.hyperledger.protos.chaincode.{ ChaincodeID, ChaincodeInput, ChaincodeInvocationSpec, ChaincodeSpec }
-import protos.proposal.{ ChaincodeHeaderExtension, ChaincodeProposalPayload, Proposal }
 
 /**
  * Created by goldratio on 17/02/2017.
@@ -39,6 +39,7 @@ case class TransactionRequest(chaincodePath: String, chaincodeName: String,
 
     val payload = ChaincodeProposalPayload(chaincodeInvocationSpec.toByteString)
     (Proposal(header.toByteString, payload.toByteString), txIDHex)
+    //(Proposal(ByteString.EMPTY, ByteString.EMPTY), txIDHex)
   }
 
   def createChaincodeInvocationSpec(chainCodeId: ChaincodeID, langType: ChaincodeSpec.Type, args: Seq[ByteString]) = {

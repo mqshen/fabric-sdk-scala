@@ -13,6 +13,8 @@ object SystemConfig {
 
   val CHAIN_NAME = config.getString("fabric.chain.name")
 
+  val MSPID = config.getString("fabric.chain.mpsid")
+
   val PEER_LOCATIONS = config.getStringList("fabric.peers")
   val ORDERER_LOCATIONS = config.getStringList("fabric.orderers")
   val EVENTHUB_LOCATIONS = config.getStringList("fabric.eventhubs")

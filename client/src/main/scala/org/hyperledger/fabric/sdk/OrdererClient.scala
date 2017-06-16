@@ -2,13 +2,13 @@ package org.hyperledger.fabric.sdk
 
 import java.util.concurrent.{ CountDownLatch, TimeUnit }
 
-import common.common.Envelope
 import io.grpc.stub.StreamObserver
 import io.grpc.ManagedChannelBuilder
-import orderer.ab.{ AtomicBroadcastGrpc, BroadcastResponse }
+import org.hyperledger.fabric.protos.common.common.Envelope
+import org.hyperledger.fabric.protos.orderer.ab.{ AtomicBroadcastGrpc, BroadcastResponse }
+import org.hyperledger.fabric.protos.peer.peer.EndorserGrpc
 import org.hyperledger.fabric.sdk.exceptions.OrdererException
 import org.hyperledger.fabric.sdk.utils.Logging
-import protos.peer.EndorserGrpc
 
 /**
  * Created by goldratio on 21/02/2017.

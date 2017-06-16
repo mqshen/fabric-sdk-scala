@@ -3,13 +3,12 @@ package org.hyperledger.fabric.sdk.transaction
 import java.security.PrivateKey
 
 import com.google.protobuf.{ ByteString, CodedInputStream }
-import common.common._
-import msp.identities.SerializedIdentity
+import org.hyperledger.fabric.protos.common.common._
+import org.hyperledger.fabric.protos.msp.identities.SerializedIdentity
+import org.hyperledger.fabric.protos.peer.proposal.{ ChaincodeHeaderExtension, ChaincodeProposalPayload, Proposal }
+import org.hyperledger.fabric.protos.peer.proposal_response.Endorsement
+import org.hyperledger.fabric.protos.peer.transaction.{ ChaincodeActionPayload, ChaincodeEndorsedAction, Transaction, TransactionAction }
 import org.hyperledger.fabric.sdk.ca.MemberServicesFabricCAImpl
-import org.hyperledger.fabric.sdk.utils.StringUtil
-import protos.proposal.{ ChaincodeHeaderExtension, ChaincodeProposalPayload, Proposal }
-import protos.proposal_response.Endorsement
-import protos.transaction.{ ChaincodeActionPayload, ChaincodeEndorsedAction, Transaction, TransactionAction }
 
 /**
  * Created by goldratio on 17/02/2017.

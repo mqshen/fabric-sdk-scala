@@ -2,9 +2,9 @@ package org.hyperledger.fabric.sdk.events
 
 import java.util.concurrent.Executors
 
-import common.common.{ Block, ChannelHeader, Envelope, Payload }
+import org.hyperledger.fabric.protos.common.common.{ Block, ChannelHeader, Envelope, Payload }
+import org.hyperledger.fabric.protos.peer.events.Event
 import org.hyperledger.fabric.sdk.utils.ShutdownableThread
-import protos.events.Event
 
 import scala.collection.mutable
 
@@ -15,7 +15,6 @@ class BlockListener(val name: String, transactionListenerManager: TransactionLis
 
   def received(block: Block): Unit = {
     val data = block.getData
-
     data.data.foreach { db =>
       val env = Envelope.parseFrom(db.toByteArray)
       val payload = Payload.parseFrom(env.payload.toByteArray)

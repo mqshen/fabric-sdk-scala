@@ -55,6 +55,7 @@ object CryptoPrimitives {
 class CryptoPrimitives(var hashAlgorithm: String, var securityLevel: Int) {
   import CryptoPrimitives._
 
+  //  Security.insertProviderAt(new BouncyCastleProvider(), 1)
   Security.addProvider(new BouncyCastleProvider)
   //
   //
@@ -74,7 +75,7 @@ class CryptoPrimitives(var hashAlgorithm: String, var securityLevel: Int) {
       throw new RuntimeException("Illegal Hash function family: " + this.hashAlgorithm + " - must be either SHA2 or SHA3")
     // this.suite = this.algorithm.toLowerCase() + '-' + this.securityLevel;
     if (this.securityLevel == 256) {
-      this.curveName = "P-256" // Curve that is currently used by FAB services.
+      this.curveName = "P-256" // Curve that is currently used by FAB services.  //secp256r1
       // TODO: HashOutputSize=32 ?
     } else if (this.securityLevel == 384) {
       this.curveName = "secp384r1"
@@ -99,7 +100,7 @@ class CryptoPrimitives(var hashAlgorithm: String, var securityLevel: Int) {
   }
 
   def generateCertificationRequest(subject: String, pair: KeyPair) = {
-    val p10Builder: PKCS10CertificationRequestBuilder = new JcaPKCS10CertificationRequestBuilder(new X500Principal("CN=" + subject), pair.getPublic)
+    val p10Builder: PKCS10CertificationRequestBuilder = new JcaPKCS10CertificationRequestBuilder(new X500Principal("CN=" + subject + ", OU=fabric-server"), pair.getPublic)
     val csBuilder: JcaContentSignerBuilder = new JcaContentSignerBuilder("SHA256withECDSA")
     // csBuilder.setProvider("EC");
     val signer: ContentSigner = csBuilder.build(pair.getPrivate)
@@ -160,6 +161,7 @@ class CryptoPrimitives(var hashAlgorithm: String, var securityLevel: Int) {
     if (plainText.isEmpty || signature.isEmpty || pemCertificate.isEmpty) false
     else {
       try {
+        println(new String(pemCertificate))
         val pem = new BufferedInputStream(new ByteArrayInputStream(pemCertificate))
         val certFactory = CertificateFactory.getInstance(CERTIFICATE_FORMAT)
         val certificate = certFactory.generateCertificate(pem).asInstanceOf[X509Certificate]
@@ -184,10 +186,8 @@ class CryptoPrimitives(var hashAlgorithm: String, var securityLevel: Int) {
           }
         }
       } catch {
-        case e: Any => {
-          isVerified = false
-        }
-        case e: Any => {
+        case e => {
+          e.printStackTrace()
           isVerified = false
         }
       }
@@ -210,7 +210,8 @@ class CryptoPrimitives(var hashAlgorithm: String, var securityLevel: Int) {
       certValidator.validate(certPath, parms)
       isValidated = true
     } catch {
-      case e: Any => {
+      case e => {
+        e.printStackTrace()
         isValidated = false
       }
     }

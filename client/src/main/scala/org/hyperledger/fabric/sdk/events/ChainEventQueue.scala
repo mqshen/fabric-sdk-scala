@@ -2,8 +2,8 @@ package org.hyperledger.fabric.sdk.events
 
 import java.util.concurrent.LinkedBlockingQueue
 
+import org.hyperledger.fabric.protos.peer.events.Event
 import org.hyperledger.fabric.sdk.utils.Logging
-import protos.events.Event
 
 /**
  * Created by goldratio on 21/02/2017.
