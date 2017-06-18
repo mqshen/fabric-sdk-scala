@@ -9,30 +9,23 @@ object Build extends Build {
     paths.foldLeft(false)(_ || mapping._1.getPath.contains(_))
   }
 
-  lazy val root = Project("fabric-sdk-scala", file("."))
-    .aggregate(caclient, client, example)
+  lazy val root = Project("belink-sdk", file("."))
+    .aggregate(client, example)
     .settings(basicSettings: _*)
     .settings(noPublishing: _*)
 
-  lazy val caclient = Project("fabric-ca-client", file("ca-client"))
+  lazy val client = Project("belink-client", file("client"))
     .settings(basicSettings: _*)
     .settings(formatSettings: _*)
     .settings(releaseSettings: _*)
-    .settings(libraryDependencies ++= Dependencies.all )
-    .settings(unmanagedSourceDirectories in Test += baseDirectory.value / "multi-jvm/scala")
-
-  lazy val client = Project("fabric-client", file("client"))
-    .settings(basicSettings: _*)
-    .settings(formatSettings: _*)
-    .settings(releaseSettings: _*)
-    .settings(libraryDependencies ++= (Dependencies.all ++ Dependencies.bubi) )
+    .settings(libraryDependencies ++= (Dependencies.all ++ Dependencies.belink) )
     .settings(scalaPbSettings: _*)
 
   lazy val example = Project("example", file("example"))
     .settings(basicSettings: _*)
     .settings(formatSettings: _*)
     .settings(releaseSettings: _*)
-    .settings(libraryDependencies ++= (Dependencies.all ++ Dependencies.bubi) )
+    .settings(libraryDependencies ++= (Dependencies.all ) )
 
 	lazy val scalaPbSettings = Seq(
     PB.targets in Compile := Seq(
@@ -210,15 +203,12 @@ object Dependencies {
 
   val ScalatraVersion = "2.3.0"
 
-  val bubi = Seq(
+  val belink = Seq(
     "net.i2p.crypto" % "eddsa" % "0.1.0",
     "cn.bubi" % "message" % "0.0.1",
     "com.alibaba" % "fastjson" % "1.2.15",
-    "com.chrylis" % "base58-codec" % "1.2.0"
-  )
-
-  val fabric = Seq(
-
+    "com.chrylis" % "base58-codec" % "1.2.0",
+    "com.ynet.chainsdk" %% "fabric-client" % "0.1.0-SNAPSHOT"
   )
 
   val benchmark = Seq(

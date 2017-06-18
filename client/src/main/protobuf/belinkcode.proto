@@ -17,8 +17,8 @@ limitations under the License.
 syntax = "proto3";
 
 package protos;
-option java_package = "org.hyperledger.fabric.protos.peer";
-option go_package = "github.com/hyperledger/fabric/protos/peer";
+option java_package = "com.belink.data.protos.peer";
+//option go_package = "github.com/hyperledger/fabric/protos/peer";
 import "google/protobuf/timestamp.proto";
 
 
@@ -36,7 +36,7 @@ enum ConfidentialityLevel {
 //are expected to provide the hashCode. The other value will be ignored.
 //Internally, the structure could contain both values. For instance, the
 //hashCode will be set when first generated using the path
-message ChaincodeID {
+message BelinkcodeID {
     //deploy transaction will use the path
     string path = 1;
 
@@ -51,13 +51,13 @@ message ChaincodeID {
 // Carries the chaincode function and its arguments.
 // UnmarshalJSON in transaction.go converts the string-based REST/JSON input to
 // the []byte-based current ChaincodeInput structure.
-message ChaincodeInput {
+message BelinkcodeInput {
     repeated bytes args  = 1;
 }
 
 // Carries the chaincode specification. This is the actual metadata required for
 // defining a chaincode.
-message ChaincodeSpec {
+message BelinkcodeSpec {
 
     enum Type {
         UNDEFINED = 0;
@@ -68,32 +68,32 @@ message ChaincodeSpec {
     }
 
     Type type = 1;
-    ChaincodeID chaincode_id = 2;
-    ChaincodeInput input = 3;
+    BelinkcodeID belinkcode_id = 2;
+    BelinkcodeInput input = 3;
     int32 timeout = 4;
 }
 
 // Specify the deployment of a chaincode.
 // TODO: Define `codePackage`.
-message ChaincodeDeploymentSpec {
+message BelinkcodeDeploymentSpec {
 
     enum ExecutionEnvironment {
         DOCKER = 0;
         SYSTEM = 1;
     }
 
-    ChaincodeSpec chaincode_spec = 1;
-    // Controls when the chaincode becomes executable.
+    BelinkcodeSpec belinkcode_spec = 1;
+    // Controls when the belinkcode becomes executable.
     google.protobuf.Timestamp effective_date = 2;
     bytes code_package = 3;
     ExecutionEnvironment exec_env=  4;
 
 }
 
-// Carries the chaincode function and its arguments.
-message ChaincodeInvocationSpec {
+// Carries the Belinkcode function and its arguments.
+message BelinkcodeInvocationSpec {
 
-    ChaincodeSpec chaincode_spec = 1;
+    BelinkcodeSpec belinkcode_spec = 1;
     // This field can contain a user-specified ID generation algorithm
     // If supplied, this will be used to generate a ID
     // If not supplied (left empty), sha256base64 will be used

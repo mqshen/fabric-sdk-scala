@@ -1,19 +1,19 @@
 package org.hyperledger.fabric.sdk.chaincode
 
 import java.io.File
-import java.nio.charset.{Charset, StandardCharsets}
+import java.nio.charset.{ Charset, StandardCharsets }
 
 import com.google.protobuf.ByteString
 import io.netty.util.internal.StringUtil
-import org.hyperledger.fabric.protos.common.msp_principal.{MSPPrincipal, MSPRole}
+import org.hyperledger.fabric.protos.common.msp_principal.{ MSPPrincipal, MSPRole }
 import org.hyperledger.fabric.protos.common.policies.SignaturePolicy.Type.SignedBy
-import org.hyperledger.fabric.protos.common.policies.SignaturePolicy.{NOutOf, Type}
-import org.hyperledger.fabric.protos.common.policies.{SignaturePolicy, SignaturePolicyEnvelope}
-import org.hyperledger.fabric.protos.peer.chaincode.{ChaincodeDeploymentSpec, ChaincodeID, ChaincodeInput, ChaincodeSpec}
+import org.hyperledger.fabric.protos.common.policies.SignaturePolicy.{ NOutOf, Type }
+import org.hyperledger.fabric.protos.common.policies.{ SignaturePolicy, SignaturePolicyEnvelope }
+import org.hyperledger.fabric.protos.peer.chaincode.{ ChaincodeDeploymentSpec, ChaincodeID, ChaincodeInput, ChaincodeSpec }
 import org.hyperledger.fabric.sdk.SystemConfig
 import org.hyperledger.fabric.sdk.ca.Certificate
 import org.hyperledger.fabric.sdk.helper.SDKUtil
-import org.hyperledger.fabric.sdk.transaction.{GO_LANG, TransactionRequest}
+import org.hyperledger.fabric.sdk.transaction.{ GO_LANG, TransactionRequest }
 
 /**
  * Created by goldratio on 17/02/2017.
@@ -60,8 +60,8 @@ class DeploymentProposalRequest(deployType: DeploymentProposalRequest.DeployType
           createDeploymentSpec(chaincodeName, args, ByteString.copyFrom(data), chaincodeDir, chainCodeVersion).toByteString)
       case Instantiate =>
         val principal = MSPPrincipal(principal = MSPRole(SystemConfig.MSPID).toByteString)
-//        val twoSignedBy = SignaturePolicy(SignedBy(0))  //index 表示在identities数组中的位置
-//        val t = SignaturePolicy(Type.NOutOf(NOutOf(2, Seq(twoSignedBy))))  //index 表示在identities数组中的位置
+        //        val twoSignedBy = SignaturePolicy(SignedBy(0))  //index 表示在identities数组中的位置
+        //        val t = SignaturePolicy(Type.NOutOf(NOutOf(2, Seq(twoSignedBy))))  //index 表示在identities数组中的位置
         val t = SignaturePolicy(SignedBy(0))
         val policy = SignaturePolicyEnvelope(policy = Some(t), identities = Seq(principal))
         Seq[ByteString](

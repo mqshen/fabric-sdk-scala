@@ -4,6 +4,7 @@ import java.util
 import com.google.common.io.BaseEncoding
 import org.hyperledger.fabric.protos.common.common._
 import org.hyperledger.fabric.protos.common.ledger.BlockchainInfo
+import org.hyperledger.fabric.protos.msp.identities.SerializedIdentity
 import org.hyperledger.fabric.protos.peer.chaincode.{ChaincodeID, ChaincodeInvocationSpec}
 import org.hyperledger.fabric.protos.peer.proposal.ChaincodeProposalPayload
 import org.hyperledger.fabric.protos.peer.transaction.{ChaincodeActionPayload, Transaction}
@@ -184,7 +185,7 @@ object AlgorithmTest {
         version = QUERY_CHAIN_CODE_VERSION)
       val nonce = SDKUtil.generateNonce
       val userQueryProposalRequest = new QueryProposalRequest(chainCodeID.path, chainCodeID.name,
-        chainCodeID, "GetBlockByNumber", Seq("testchainid", "2"))
+        chainCodeID, "GetChainInfo", Seq("testchainid", "2"))
 
 
       chain.sendQueryProposal(userQueryProposalRequest, admin).map { res =>
@@ -204,7 +205,7 @@ object AlgorithmTest {
         version = QUERY_CHAIN_CODE_VERSION)
       val nonce = SDKUtil.generateNonce
       val userQueryProposalRequest = new QueryProposalRequest(chainCodeID.path, chainCodeID.name,
-        chainCodeID, "GetBlockByNumber", Seq("testchainid", "2"))
+        chainCodeID, "GetBlockByNumber", Seq("testchainid", "3"))
 
       chain.sendQueryProposal(userQueryProposalRequest, admin).map { res =>
         val successful = res.filter(x => x.isVerified && x.status == ChainCodeResponse.SUCCESS)
@@ -228,11 +229,14 @@ object AlgorithmTest {
             channelHeader.`type` match {
               case HeaderType.ENDORSER_TRANSACTION.value =>
                 val tx = Transaction.parseFrom(payload.data.toByteArray)
+                val h = SignatureHeader.parseFrom(tx.actions(0).header.toByteArray)
+                val identity = SerializedIdentity.parseFrom(h.creator.toByteArray)
                 val chaincodeActionPayload = ChaincodeActionPayload.parseFrom( tx.actions(0).payload.toByteArray)
                 val cppNoTransient = ChaincodeProposalPayload.parseFrom(chaincodeActionPayload.chaincodeProposalPayload.toByteArray)
                 val pPayl = ChaincodeProposalPayload.parseFrom(cppNoTransient.input.toByteArray)
                 val spec = ChaincodeInvocationSpec.parseFrom(pPayl.toByteArray)
                 println(spec)
+                println(identity.idBytes.toStringUtf8)
             }
             payload.data
           }
@@ -244,6 +248,7 @@ object AlgorithmTest {
 //    Thread.sleep(10000)
 //    doTest()
 
+    queryBlockchainInfo
     queryBlockchainByNumber
   }
 
