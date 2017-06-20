@@ -215,14 +215,4 @@ object Dependencies {
     "com.zaxxer" % "HikariCP" % "2.5.1"
   )
 
-  val web = Seq(
-    "org.json4s" %% "json4s-jackson" % "3.2.10",
-    "commons-io" % "commons-io" % "2.4",
-    "org.scalatra" %% "scalatra" % ScalatraVersion,
-    "org.scalatra" %% "scalatra-scalate" % ScalatraVersion,
-    "org.scalatra" %% "scalatra-atmosphere" % ScalatraVersion,
-    "org.scalatra" %% "scalatra-specs2" % ScalatraVersion % "test",
-    "org.scalatra" %% "scalatra-json" % ScalatraVersion,
-    "javax.servlet" % "javax.servlet-api" % "3.1.0"
-  )
 }
