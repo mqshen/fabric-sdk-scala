@@ -7,7 +7,7 @@ import org.hyperledger.fabric.protos.common.common._
 import org.hyperledger.fabric.protos.msp.identities.SerializedIdentity
 import org.hyperledger.fabric.protos.peer.chaincode.ChaincodeInvocationSpec
 import org.hyperledger.fabric.protos.peer.proposal.ChaincodeProposalPayload
-import org.hyperledger.fabric.protos.peer.transaction.{ChaincodeActionPayload, Transaction}
+import org.hyperledger.fabric.protos.peer.transaction.{ ChaincodeActionPayload, Transaction }
 import org.hyperledger.fabric.sdk.User
 import org.hyperledger.fabric.sdk.events._
 

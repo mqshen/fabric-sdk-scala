@@ -5,9 +5,9 @@ import java.nio.charset.StandardCharsets
 import java.util.UUID
 
 import com.belink.chain.peer.Peer
-import com.belink.data.protos.common.common.{ChannelHeader, Header}
+import com.belink.data.protos.common.common.{ ChannelHeader, Header }
 import com.belink.data.protos.peer.belinkcode._
-import com.belink.data.protos.peer.proposal.{BelinkcodeProposalPayload, Proposal}
+import com.belink.data.protos.peer.proposal.{ BelinkcodeProposalPayload, Proposal }
 import org.apache.http.client.methods.HttpGet
 import org.apache.http.impl.client.HttpClients
 import org.apache.http.impl.conn.PoolingHttpClientConnectionManager
@@ -119,7 +119,7 @@ func main() {
   }
 
   def getInstallProposal(cds: BelinkcodeDeploymentSpec, chaincodeDir: String, install: Boolean) = {
-    val argList:Seq[ByteString] = if(install) {
+    val argList: Seq[ByteString] = if (install) {
       val goPath = System.getenv("GOPATH")
       if (StringUtil.isNullOrEmpty(goPath)) throw new IllegalArgumentException("[NetMode] Missing GOPATH environment variable")
       val rootDir = SDKUtil.combinePaths(goPath, "src")

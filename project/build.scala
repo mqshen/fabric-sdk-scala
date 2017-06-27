@@ -10,9 +10,24 @@ object Build extends Build {
   }
 
   lazy val root = Project("belink-sdk", file("."))
-    .aggregate(client, example)
+    .aggregate(clients, core, client, example)
     .settings(basicSettings: _*)
     .settings(noPublishing: _*)
+
+  lazy val clients = Project("belink-clients", file("clients"))
+    .settings(basicSettings: _*)
+    .settings(formatSettings: _*)
+    .settings(releaseSettings: _*)
+    .settings(libraryDependencies ++= (Dependencies.all ++ Dependencies.belink) )
+    .settings(scalaPbSettings: _*)
+
+  lazy val core = Project("belink-core", file("core"))
+    .settings(basicSettings: _*)
+    .settings(formatSettings: _*)
+    .settings(releaseSettings: _*)
+    .settings(libraryDependencies ++= (Dependencies.all ++ Dependencies.belink) )
+    .settings(scalaPbSettings: _*)
+    .dependsOn(clients)
 
   lazy val client = Project("belink-client", file("client"))
     .settings(basicSettings: _*)
@@ -182,14 +197,11 @@ object Dependencies {
     "org.apache.commons" % "commons-compress" % "1.5",
     "org.apache.commons" % "commons-email" % "1.3.1",
     "org.apache.httpcomponents" % "httpclient" % "4.5.2",
-    "mysql" % "mysql-connector-java" % "5.1.29",
     "junit" % "junit" % "4.11" % "test",
     "log4j" % "log4j" % log4jVersion,
     "org.slf4j" % "slf4j-api" % slf4jVersion,
     "org.slf4j" % "slf4j-log4j12" % slf4jVersion,
-    "org.clapper" %% "grizzled-slf4j" % "1.0.4",
-    "io.grpc" % "grpc-netty" % "1.2.0",
-    "com.trueaccord.scalapb" %% "scalapb-runtime-grpc" % com.trueaccord.scalapb.compiler.Version.scalapbVersion,
+    "net.sf.jopt-simple" % "jopt-simple" % "5.0.3",
     "com.typesafe" % "config" % "1.3.0",
     "org.bouncycastle" % "bcprov-jdk15on" % bcVersion,
     "org.bouncycastle" % "bcpkix-jdk15on" % bcVersion//,

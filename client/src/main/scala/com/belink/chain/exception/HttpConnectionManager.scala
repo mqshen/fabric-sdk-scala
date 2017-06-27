@@ -7,7 +7,7 @@ import org.apache.http.conn.socket.ConnectionSocketFactory
 import org.apache.http.conn.ssl.SSLConnectionSocketFactory
 import org.apache.http.impl.client.HttpClients
 import org.apache.http.impl.conn.PoolingHttpClientConnectionManager
-import org.apache.http.ssl.{SSLContexts, TrustStrategy}
+import org.apache.http.ssl.{ SSLContexts, TrustStrategy }
 
 /**
  * Created by goldratio on 7/29/16.

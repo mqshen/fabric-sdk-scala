@@ -1,8 +1,8 @@
 package com.belink.chain.config
 
 /**
-  * Created by goldratio on 24/06/2017.
-  */
+ * Created by goldratio on 24/06/2017.
+ */
 object SystemConfig {
 
   import com.typesafe.config.ConfigFactory

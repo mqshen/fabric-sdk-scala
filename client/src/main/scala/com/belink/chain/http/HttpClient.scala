@@ -2,16 +2,16 @@ package com.belink.chain.http
 
 import java.io.IOException
 
-import com.belink.chain.exception.{ChainViewException, HttpConnectionManager}
-import org.apache.http.client.methods.{CloseableHttpResponse, HttpGet, HttpPost, HttpRequestBase}
+import com.belink.chain.exception.{ ChainViewException, HttpConnectionManager }
+import org.apache.http.client.methods.{ CloseableHttpResponse, HttpGet, HttpPost, HttpRequestBase }
 import org.apache.http.entity.ByteArrayEntity
 import org.apache.http.protocol.BasicHttpContext
 import org.apache.http.util.EntityUtils
-import org.slf4j.{Logger, LoggerFactory}
+import org.slf4j.{ Logger, LoggerFactory }
 
 /**
-  * Created by goldratio on 24/06/2017.
-  */
+ * Created by goldratio on 24/06/2017.
+ */
 class HttpClient(httpConnectionManager: HttpConnectionManager) {
   val logger: Logger = LoggerFactory.getLogger(this.getClass)
 

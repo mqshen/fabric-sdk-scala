@@ -5,8 +5,8 @@ import com.belink.chain.http.HttpClient
 import org.json4s.jackson.Serialization.read
 
 /**
-  * Created by goldratio on 24/06/2017.
-  */
+ * Created by goldratio on 24/06/2017.
+ */
 case class CurrentLedger(ledger_sequence: Long)
 
 class BubiChainView(httpClient: HttpClient) {
