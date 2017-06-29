@@ -30,8 +30,15 @@ class BubiChainView(httpClient: HttpClient) {
 
   def transactions(index: Int, number: Long) = {
     val info = httpClient.get(s"${SystemConfig.bubiHost}/getTransactionHistory?start=$index&limit=$number")
-    val json = read[TransactionRes](info)
-    if (json.error_code == 0) json.result.get.transactions else throw new Exception("get transaction failed")
+    try {
+      val json = read[TransactionRes](info)
+      if (json.error_code == 0) json.result.transactions else throw new Exception("get transaction failed")
+    } catch {
+      case e =>
+        e.printStackTrace()
+        println(info)
+        throw e
+    }
   }
 
   def addressInfo(address: String) = {
@@ -43,7 +50,7 @@ class BubiChainView(httpClient: HttpClient) {
   def transactionInfo(hash: String) = {
     val info = httpClient.get(s"${SystemConfig.bubiHost}/transaction?hash=$hash")
     val json = read[TransactionRes](info)
-    if (json.error_code == 0) json.result.get.transactions(0) else throw new Exception("get Chain Block fained")
+    if (json.error_code == 0) json.result.transactions(0) else throw new Exception("get Chain Block fained")
   }
 
 }

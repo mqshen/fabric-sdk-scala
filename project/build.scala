@@ -10,31 +10,35 @@ object Build extends Build {
   }
 
   lazy val root = Project("belink-sdk", file("."))
-    .aggregate(clients, core, client, example)
+    .aggregate(blockchain, clients, core, client, example)
     .settings(basicSettings: _*)
     .settings(noPublishing: _*)
+
+  lazy val blockchain = Project("belink-blockchain", file("blockchain"))
+    .settings(basicSettings: _*)
+    .settings(formatSettings: _*)
+    .settings(releaseSettings: _*)
+    .settings(libraryDependencies ++= (Dependencies.all ++ Dependencies.blockchain) )
+    .settings(scalaPbSettings: _*)
 
   lazy val clients = Project("belink-clients", file("clients"))
     .settings(basicSettings: _*)
     .settings(formatSettings: _*)
     .settings(releaseSettings: _*)
     .settings(libraryDependencies ++= (Dependencies.all ++ Dependencies.belink) )
-    .settings(scalaPbSettings: _*)
 
   lazy val core = Project("belink-core", file("core"))
     .settings(basicSettings: _*)
     .settings(formatSettings: _*)
     .settings(releaseSettings: _*)
     .settings(libraryDependencies ++= (Dependencies.all ++ Dependencies.belink) )
-    .settings(scalaPbSettings: _*)
-    .dependsOn(clients)
+    .dependsOn(clients, blockchain)
 
   lazy val client = Project("belink-client", file("client"))
     .settings(basicSettings: _*)
     .settings(formatSettings: _*)
     .settings(releaseSettings: _*)
-    .settings(libraryDependencies ++= (Dependencies.all ++ Dependencies.belink) )
-    .settings(scalaPbSettings: _*)
+    .settings(libraryDependencies ++= (Dependencies.all ++ Dependencies.belink ++ Dependencies.blockchain) )
 
   lazy val example = Project("example", file("example"))
     .settings(basicSettings: _*)
@@ -216,9 +220,13 @@ object Dependencies {
   val ScalatraVersion = "2.3.0"
 
   val belink = Seq(
+    "com.yammer.metrics" % "metrics-core" % "2.2.0"
+  )
+
+  val blockchain = Seq(
     "net.i2p.crypto" % "eddsa" % "0.1.0",
-    "cn.bubi" % "message" % "0.0.1",
     "com.alibaba" % "fastjson" % "1.2.15",
+    "cn.bubi" % "message" % "0.0.1",
     "com.chrylis" % "base58-codec" % "1.2.0",
     "com.ynet.chainsdk" %% "fabric-client" % "0.1.0-SNAPSHOT"
   )

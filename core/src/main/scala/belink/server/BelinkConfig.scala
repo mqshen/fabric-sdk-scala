@@ -27,6 +27,9 @@ object Defaults {
   val QueuedMaxRequests = 500
 
 
+  val NumIoThreads = 8
+
+
   val NumNetworkThreads = 3
   val BackgroundThreads = 10
   /** ********* Kafka Metrics Configuration ***********/
@@ -87,6 +90,7 @@ object BelinkConfig {
 
   val QueuedMaxRequestsProp = "queued.max.requests"
 
+  val NumIoThreadsProp = "num.io.threads"
   /** ********* Socket Server Configuration ***********/
   val PortProp = "port"
   val HostNameProp = "host.name"
@@ -111,6 +115,9 @@ object BelinkConfig {
     " Examples of legal listener lists:\n" +
     " PLAINTEXT://myhost:9092,SSL://:9091\n" +
     " CLIENT://0.0.0.0:9092,REPLICATION://localhost:9093\n"
+
+  val NumIoThreadsDoc = "The number of io threads that the server uses for carrying out network requests"
+
   /** ********* Kafka Metrics Configuration ***********/
   val MetricSampleWindowMsDoc = CommonClientConfigs.METRICS_SAMPLE_WINDOW_MS_DOC
   val MetricNumSamplesDoc = CommonClientConfigs.METRICS_NUM_SAMPLES_DOC
@@ -171,6 +178,8 @@ object BelinkConfig {
 
       .define(SaslEnabledMechanismsProp, LIST, Defaults.SaslEnabledMechanisms, MEDIUM, SaslEnabledMechanismsDoc)
 
+      .define(NumIoThreadsProp, INT, Defaults.NumIoThreads, atLeast(1), HIGH, NumIoThreadsDoc)
+
   }
 
   def fromProps(props: Properties): BelinkConfig =
@@ -217,8 +226,9 @@ class BelinkConfig(val props: java.util.Map[_, _], doLog: Boolean) extends Abstr
 
   val socketRequestMaxBytes = getInt(BelinkConfig.SocketRequestMaxBytesProp)
 
-
   val backgroundThreads = getInt(BelinkConfig.BackgroundThreadsProp)
+
+  val numIoThreads = getInt(BelinkConfig.NumIoThreadsProp)
 
   /** ***** block chain configuration ****** **/
   val blockchainSyncInterval = getLong(BelinkConfig.BlockchainSyncIntervalProp)

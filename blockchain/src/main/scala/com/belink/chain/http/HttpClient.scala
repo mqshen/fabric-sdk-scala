@@ -2,7 +2,7 @@ package com.belink.chain.http
 
 import java.io.IOException
 
-import com.belink.chain.exception.{ ChainViewException, HttpConnectionManager }
+import com.belink.chain.exception.ChainViewException
 import org.apache.http.client.methods.{ CloseableHttpResponse, HttpGet, HttpPost, HttpRequestBase }
 import org.apache.http.entity.ByteArrayEntity
 import org.apache.http.protocol.BasicHttpContext

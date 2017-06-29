@@ -16,13 +16,16 @@ import scala.collection.JavaConverters._
   * Created by goldratio on 27/06/2017.
   */
 object BelinkServer {
+
   private[server] def metricConfig(belinkConfig: BelinkConfig): MetricConfig = {
     new MetricConfig()
       .samples(belinkConfig.metricNumSamples)
       .recordLevel(Sensor.RecordingLevel.forName(belinkConfig.metricRecordingLevel))
       .timeWindow(belinkConfig.metricSampleWindowMs, TimeUnit.MILLISECONDS)
   }
+
 }
+
 class BelinkServer(val config: BelinkConfig, time: Time = Time.SYSTEM,
                    threadNamePrefix: Option[String] = None,
                    belinkMetricsReporters: Seq[BelinkMetricsReporter] = List()) extends Logging {
@@ -35,8 +38,11 @@ class BelinkServer(val config: BelinkConfig, time: Time = Time.SYSTEM,
 
   var metrics: Metrics = null
 
+  var apis: BelinkApis = null
+
   val belinkScheduler = new BelinkScheduler(config.backgroundThreads)
   var socketServer: SocketServer = null
+  var requestHandlerPool: BelinkRequestHandlerPool = null
 
   var blockChainManager: BlockChainManager = null
 
@@ -69,6 +75,11 @@ class BelinkServer(val config: BelinkConfig, time: Time = Time.SYSTEM,
         socketServer = new SocketServer(config, metrics, time, credentialProvider)
         socketServer.startup()
 
+        /* start processing requests */
+        apis = new BelinkApis(socketServer.requestChannel)
+        requestHandlerPool = new BelinkRequestHandlerPool(socketServer.requestChannel, apis, time,
+          config.numIoThreads)
+
         blockChainManager = createBlockChainManager(isShuttingDown)
         blockChainManager.startup()
 
@@ -88,7 +99,7 @@ class BelinkServer(val config: BelinkConfig, time: Time = Time.SYSTEM,
 
 
   protected def createBlockChainManager(isShuttingDown: AtomicBoolean): BlockChainManager =
-    new BlockChainManager(config, time, belinkScheduler, isShuttingDown)
+    new BlockChainManager(config, time, belinkScheduler, socketServer.requestChannel, isShuttingDown)
 
 
   def shutdown() {

@@ -106,7 +106,7 @@ public abstract class AbstractRequest extends AbstractRequestResponse {
         AbstractRequest request = null;
         switch (apiKey) {
             case PRODUCE:
-                //request = new ProduceRequest(struct, version);
+                request = new ProduceRequest(struct, version);
                 break;
             default:
                 throw new AssertionError(String.format("ApiKey %s is not currently handled in `getRequest`, the " +

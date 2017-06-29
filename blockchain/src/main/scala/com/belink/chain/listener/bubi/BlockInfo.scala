@@ -25,7 +25,7 @@ case class Operation(asset_amount: Option[Long],
                      asset_code: Option[String],
                      asset_issuer: Option[String],
                      asset_type: Option[Int],
-                     dest_address: String,
+                     dest_address: Option[String],
                      details: Seq[AssetDetail],
                      metadata: Option[String],
                      source_address: Option[String],
@@ -45,7 +45,7 @@ case class Transaction(apply_time: Long,
 
 case class TransactionArray(total_count: Long, transactions: Seq[Transaction])
 
-case class TransactionRes(error_code: Int, result: Option[TransactionArray])
+case class TransactionRes(error_code: Int, result: TransactionArray)
 
 case class Asset(amount: Long, code: String, details: Seq[AssetDetail], issuer: String, `type`: Int)
 
