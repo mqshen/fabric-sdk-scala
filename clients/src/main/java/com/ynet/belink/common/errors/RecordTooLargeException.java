@@ -16,7 +16,7 @@
  */
 package com.ynet.belink.common.errors;
 
-import com.ynet.belink.common.Topic;
+import com.ynet.belink.common.TopicPartition;
 
 import java.util.Map;
 
@@ -26,7 +26,7 @@ import java.util.Map;
 public class RecordTooLargeException extends ApiException {
 
     private static final long serialVersionUID = 1L;
-    private Map<Topic, Long> recordTooLargePartitions = null;
+    private Map<TopicPartition, Long> recordTooLargePartitions = null;
 
     public RecordTooLargeException() {
         super();
@@ -44,12 +44,12 @@ public class RecordTooLargeException extends ApiException {
         super(cause);
     }
 
-    public RecordTooLargeException(String message, Map<Topic, Long> recordTooLargePartitions) {
+    public RecordTooLargeException(String message, Map<TopicPartition, Long> recordTooLargePartitions) {
         super(message);
         this.recordTooLargePartitions = recordTooLargePartitions;
     }
 
-    public Map<Topic, Long> recordTooLargePartitions() {
+    public Map<TopicPartition, Long> recordTooLargePartitions() {
         return recordTooLargePartitions;
     }
 }

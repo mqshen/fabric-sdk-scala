@@ -30,7 +30,7 @@ import belink.server.{FetchDataInfo, LogOffsetMetadata}
 import belink.server.checkpoints.{LeaderEpochCheckpointFile, LeaderEpochFile}
 import belink.server.epoch.{LeaderEpochCache, LeaderEpochFileCache}
 import belink.utils.{CoreUtils, Logging, Scheduler, threadsafe}
-import com.ynet.belink.common.{BelinkException, Topic}
+import com.ynet.belink.common.{BelinkException, TopicPartition}
 import com.ynet.belink.common.errors._
 import com.ynet.belink.common.record._
 import com.ynet.belink.common.requests.ListOffsetRequest
@@ -126,12 +126,12 @@ class Log(@volatile var dir: File,
       0
   }
 
-  val Topic: Topic = Log.parseTopicName(dir)
+  val topicPartition: TopicPartition = Log.parseTopicPartitionName(dir)
 
   @volatile private var nextOffsetMetadata: LogOffsetMetadata = _
 
   /* Construct and load PID map */
-  private val pidMap = new ProducerIdMapping(config, Topic, dir, maxPidExpirationMs)
+  private val pidMap = new ProducerIdMapping(config, topicPartition, dir, maxPidExpirationMs)
 
   /* the actual segments of the log */
   private val segments: ConcurrentNavigableMap[java.lang.Long, LogSegment] = new ConcurrentSkipListMap[java.lang.Long, LogSegment]
@@ -160,7 +160,7 @@ class Log(@volatile var dir: File,
       .format(name, segments.size(), logStartOffset, logEndOffset, time.milliseconds - startMs))
   }
 
-  private val tags = Map("topic" -> Topic.topic)
+  private val tags = Map("topic" -> topicPartition.topic, "partition" -> topicPartition.partition.toString)
 
 
   scheduler.schedule(name = "PeriodicPidExpirationCheck", fun = () => {
@@ -182,7 +182,7 @@ class Log(@volatile var dir: File,
   private def initializeLeaderEpochCache(): LeaderEpochCache = {
     // create the log directory if it doesn't exist
     Files.createDirectories(dir.toPath)
-    new LeaderEpochFileCache(Topic, () => logEndOffsetMetadata,
+    new LeaderEpochFileCache(topicPartition, () => logEndOffsetMetadata,
       new LeaderEpochCheckpointFile(LeaderEpochFile.newFile(dir)))
   }
 
@@ -632,7 +632,7 @@ class Log(@volatile var dir: File,
               firstOffset = lastEntry.firstOffset
               lastOffset = lastEntry.lastOffset
               maxTimestamp = lastEntry.timestamp
-              info(s"Detected a duplicate for partition $Topic at (firstOffset, lastOffset): (${firstOffset}, ${lastOffset}). " +
+              info(s"Detected a duplicate for partition $topicPartition at (firstOffset, lastOffset): (${firstOffset}, ${lastOffset}). " +
                 "Ignoring the incoming record.")
             } else {
               val producerAppendInfo = new ProducerAppendInfo(pid, lastEntry)
@@ -754,7 +754,7 @@ class Log(@volatile var dir: File,
         targetTimestamp != ListOffsetRequest.EARLIEST_TIMESTAMP &&
         targetTimestamp != ListOffsetRequest.LATEST_TIMESTAMP)
       throw new UnsupportedForMessageFormatException(s"Cannot search offsets based on timestamp because message format version " +
-          s"for partition $Topic is ${config.messageFormatVersion} which is earlier than the minimum " +
+          s"for partition $topicPartition is ${config.messageFormatVersion} which is earlier than the minimum " +
           s"required version $KAFKA_0_11_0_IV2")
 
     // Cache to avoid race conditions. `toBuffer` is faster than most alternatives and provides
@@ -1290,7 +1290,7 @@ object Log {
   /**
    * Parse the topic and partition out of the directory name of a log
    */
-  def parseTopicName(dir: File): Topic = {
+  def parseTopicPartitionName(dir: File): TopicPartition = {
 
     def exception(dir: File): BelinkException = {
       new BelinkException("Found directory " + dir.getCanonicalPath + ", " +
@@ -1313,7 +1313,7 @@ object Log {
     if (topic.length < 1 || partition.length < 1)
       throw exception(dir)
 
-    new Topic(topic)
+    new TopicPartition(topic, partition.toInt)
   }
 
 }

@@ -16,6 +16,8 @@
  */
 package com.ynet.belink.common.protocol.types;
 
+import com.ynet.belink.common.record.Records;
+
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 
@@ -112,9 +114,9 @@ public class Struct {
         return (Byte) get(name);
     }
 
-//    public Records getRecords(String name) {
-//        return (Records) get(name);
-//    }
+    public Records getRecords(String name) {
+        return (Records) get(name);
+    }
 
     public Short getShort(Field field) {
         return (Short) get(field);

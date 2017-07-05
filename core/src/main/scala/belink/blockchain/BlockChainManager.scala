@@ -9,11 +9,15 @@ import belink.server.BelinkConfig
 import belink.utils.{Logging, Scheduler}
 import com.belink.chain.http.{HttpClient, HttpConnectionManager}
 import com.belink.chain.listener.bubi.BubiChainView
+import com.ynet.belink.common.TopicPartition
 import com.ynet.belink.common.network.ListenerName
 import com.ynet.belink.common.protocol.{ApiKeys, SecurityProtocol}
+import com.ynet.belink.common.record.{CompressionType, MemoryRecords, SimpleRecord}
 import com.ynet.belink.common.requests.{ProduceRequest, RequestHeader}
 import com.ynet.belink.common.utils.Time
 import org.apache.commons.codec.binary.Hex
+
+import scala.collection.JavaConverters._
 
 /**
   * Created by goldratio on 27/06/2017.
@@ -47,13 +51,20 @@ class BlockChainManager(val config: BelinkConfig,
         chainView.transactions(0, 20).foreach { tx =>
           if (tx.operations.size == 1) {
             val operation = tx.operations.head
-            operation.metadata.map { m =>
-              val metadata = hex.decode(m.getBytes())
+            //operation.metadata.map { m =>
+            //  val metadata = hex.decode(m.getBytes())
               //val auth = read[DataAuth](new String(metadata))
               //processor.process(operation.source_address.get, auth.fromOrgId, auth.url)
               //val payload = ByteBuffer.wrap(m.getBytes())
+
+              val topicPartition = new TopicPartition("topic", 0)
+              val memoryRecords = MemoryRecords.withRecords(CompressionType.GZIP,
+                new SimpleRecord(System.currentTimeMillis(), "key1".getBytes, "value1".getBytes))
+              val partitionRecords = Map(topicPartition -> memoryRecords)
+
               val requestHeader = new RequestHeader(ApiKeys.PRODUCE.id, ApiKeys.PRODUCE.latestVersion(), "", 0)
-              val requestBuilder = new ProduceRequest.Builder(3, 0, 1000)
+              val requestBuilder = new ProduceRequest.Builder(2, 0, 1000, partitionRecords.asJava)
+              //val requestBuilder = new ProduceRequest.Builder(3, 0, 1000, Map.empty[TopicPartition, MemoryRecords].asJava)
               val request = requestBuilder.build()
               val payload = request.serialize(requestHeader)
 
@@ -61,7 +72,7 @@ class BlockChainManager(val config: BelinkConfig,
                 buffer = payload, startTimeMs = time.milliseconds, listenerName = listenerName,
                 securityProtocol = SecurityProtocol.PLAINTEXT)
               requestChannel.sendRequest(req)
-            }
+            //}
           }
         }
       }
@@ -81,4 +92,5 @@ class BlockChainManager(val config: BelinkConfig,
     //replicaFetcherManager.shutdown()
     info("Shut down completely")
   }
+
 }

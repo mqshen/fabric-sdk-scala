@@ -16,8 +16,7 @@
  */
 package com.ynet.belink.common.requests;
 
-import com.ynet.belink.common.Topic;
-import com.ynet.belink.common.Topic;
+import com.ynet.belink.common.TopicPartition;
 import com.ynet.belink.common.errors.UnsupportedVersionException;
 import com.ynet.belink.common.protocol.ApiKeys;
 import com.ynet.belink.common.protocol.Errors;
@@ -47,15 +46,15 @@ public class ListOffsetRequest extends AbstractRequest {
     private static final String MAX_NUM_OFFSETS_KEY_NAME = "max_num_offsets";
 
     private final int replicaId;
-    private final Map<Topic, PartitionData> offsetData;
-    private final Map<Topic, Long> partitionTimestamps;
-    private final Set<Topic> duplicatePartitions;
+    private final Map<TopicPartition, PartitionData> offsetData;
+    private final Map<TopicPartition, Long> partitionTimestamps;
+    private final Set<TopicPartition> duplicatePartitions;
 
     public static class Builder extends AbstractRequest.Builder<ListOffsetRequest> {
         private final int replicaId;
         private final short minVersion;
-        private Map<Topic, PartitionData> offsetData = null;
-        private Map<Topic, Long> partitionTimestamps = null;
+        private Map<TopicPartition, PartitionData> offsetData = null;
+        private Map<TopicPartition, Long> partitionTimestamps = null;
 
         public static Builder forReplica(short desiredVersion, int replicaId) {
             return new Builder((short) 0, desiredVersion, replicaId);
@@ -73,12 +72,12 @@ public class ListOffsetRequest extends AbstractRequest {
             this.replicaId = replicaId;
         }
 
-        public Builder setOffsetData(Map<Topic, PartitionData> offsetData) {
+        public Builder setOffsetData(Map<TopicPartition, PartitionData> offsetData) {
             this.offsetData = offsetData;
             return this;
         }
 
-        public Builder setTargetTimes(Map<Topic, Long> partitionTimestamps) {
+        public Builder setTargetTimes(Map<TopicPartition, Long> partitionTimestamps) {
             this.partitionTimestamps = partitionTimestamps;
             return this;
         }
@@ -96,7 +95,7 @@ public class ListOffsetRequest extends AbstractRequest {
                             "ListOffsetRequest");
                     } else {
                         offsetData = new HashMap<>();
-                        for (Map.Entry<Topic, Long> entry: partitionTimestamps.entrySet()) {
+                        for (Map.Entry<TopicPartition, Long> entry: partitionTimestamps.entrySet()) {
                             offsetData.put(entry.getKey(),
                                     new PartitionData(entry.getValue(), 1));
                         }
@@ -112,7 +111,7 @@ public class ListOffsetRequest extends AbstractRequest {
                             version + " ListOffsetRequest");
                 }
             }
-            Map<Topic, ?> m = (version == 0) ?  offsetData : partitionTimestamps;
+            Map<TopicPartition, ?> m = (version == 0) ?  offsetData : partitionTimestamps;
             return new ListOffsetRequest(replicaId, m, version);
         }
 
@@ -160,17 +159,17 @@ public class ListOffsetRequest extends AbstractRequest {
      * Private constructor with a specified version.
      */
     @SuppressWarnings("unchecked")
-    private ListOffsetRequest(int replicaId, Map<Topic, ?> targetTimes, short version) {
+    private ListOffsetRequest(int replicaId, Map<TopicPartition, ?> targetTimes, short version) {
         super(version);
         this.replicaId = replicaId;
-        this.offsetData = version == 0 ? (Map<Topic, PartitionData>) targetTimes : null;
-        this.partitionTimestamps = version == 1 ? (Map<Topic, Long>) targetTimes : null;
+        this.offsetData = version == 0 ? (Map<TopicPartition, PartitionData>) targetTimes : null;
+        this.partitionTimestamps = version == 1 ? (Map<TopicPartition, Long>) targetTimes : null;
         this.duplicatePartitions = Collections.emptySet();
     }
 
     public ListOffsetRequest(Struct struct, short version) {
         super(version);
-        Set<Topic> duplicatePartitions = new HashSet<>();
+        Set<TopicPartition> duplicatePartitions = new HashSet<>();
         replicaId = struct.getInt(REPLICA_ID_KEY_NAME);
         offsetData = new HashMap<>();
         partitionTimestamps = new HashMap<>();
@@ -179,8 +178,9 @@ public class ListOffsetRequest extends AbstractRequest {
             String topic = topicResponse.getString(TOPIC_KEY_NAME);
             for (Object partitionResponseObj : topicResponse.getArray(PARTITIONS_KEY_NAME)) {
                 Struct partitionResponse = (Struct) partitionResponseObj;
+                int partition = partitionResponse.getInt(PARTITION_KEY_NAME);
                 long timestamp = partitionResponse.getLong(TIMESTAMP_KEY_NAME);
-                Topic tp = new Topic(topic);
+                TopicPartition tp = new TopicPartition(topic, partition);
                 if (partitionResponse.hasField(MAX_NUM_OFFSETS_KEY_NAME)) {
                     int maxNumOffsets = partitionResponse.getInt(MAX_NUM_OFFSETS_KEY_NAME);
                     PartitionData partitionData = new PartitionData(timestamp, maxNumOffsets);
@@ -197,17 +197,17 @@ public class ListOffsetRequest extends AbstractRequest {
     @Override
     @SuppressWarnings("deprecation")
     public AbstractResponse getErrorResponse(Throwable e) {
-        Map<Topic, ListOffsetResponse.PartitionData> responseData = new HashMap<>();
+        Map<TopicPartition, ListOffsetResponse.PartitionData> responseData = new HashMap<>();
 
         short versionId = version();
         if (versionId == 0) {
-            for (Map.Entry<Topic, PartitionData> entry : offsetData.entrySet()) {
+            for (Map.Entry<TopicPartition, PartitionData> entry : offsetData.entrySet()) {
                 ListOffsetResponse.PartitionData partitionResponse = new ListOffsetResponse.PartitionData(
                         Errors.forException(e), Collections.<Long>emptyList());
                 responseData.put(entry.getKey(), partitionResponse);
             }
         } else {
-            for (Map.Entry<Topic, Long> entry : partitionTimestamps.entrySet()) {
+            for (Map.Entry<TopicPartition, Long> entry : partitionTimestamps.entrySet()) {
                 ListOffsetResponse.PartitionData partitionResponse = new ListOffsetResponse.PartitionData(
                         Errors.forException(e), -1L, -1L);
                 responseData.put(entry.getKey(), partitionResponse);
@@ -229,15 +229,15 @@ public class ListOffsetRequest extends AbstractRequest {
     }
 
     @Deprecated
-    public Map<Topic, PartitionData> offsetData() {
+    public Map<TopicPartition, PartitionData> offsetData() {
         return offsetData;
     }
 
-    public Map<Topic, Long> partitionTimestamps() {
+    public Map<TopicPartition, Long> partitionTimestamps() {
         return partitionTimestamps;
     }
 
-    public Set<Topic> duplicatePartitions() {
+    public Set<TopicPartition> duplicatePartitions() {
         return duplicatePartitions;
     }
 
@@ -250,7 +250,7 @@ public class ListOffsetRequest extends AbstractRequest {
         short version = version();
         Struct struct = new Struct(ApiKeys.LIST_OFFSETS.requestSchema(version));
 
-        Map<Topic, ?> targetTimes = partitionTimestamps == null ? offsetData : partitionTimestamps;
+        Map<TopicPartition, ?> targetTimes = partitionTimestamps == null ? offsetData : partitionTimestamps;
         Map<String, Map<Integer, Object>> topicsData = CollectionUtils.groupDataByTopic(targetTimes);
 
         struct.set(REPLICA_ID_KEY_NAME, replicaId);

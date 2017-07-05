@@ -17,6 +17,9 @@
 package com.ynet.belink.common.protocol.types;
 
 
+import com.ynet.belink.common.record.FileRecords;
+import com.ynet.belink.common.record.MemoryRecords;
+import com.ynet.belink.common.record.Records;
 import com.ynet.belink.common.utils.ByteUtils;
 import com.ynet.belink.common.utils.Utils;
 
@@ -462,22 +465,36 @@ public abstract class Type {
 
         @Override
         public void write(ByteBuffer buffer, Object o) {
-
+            if (o instanceof FileRecords)
+                throw new IllegalArgumentException("FileRecords must be written to the channel directly");
+            MemoryRecords records = (MemoryRecords) o;
+            NULLABLE_BYTES.write(buffer, records.buffer().duplicate());
         }
 
         @Override
         public Object read(ByteBuffer buffer) {
-            return null;
+            ByteBuffer recordsBuffer = (ByteBuffer) NULLABLE_BYTES.read(buffer);
+            return MemoryRecords.readableRecords(recordsBuffer);
         }
 
         @Override
-        public Object validate(Object o) {
-            return null;
+        public Object validate(Object item) {
+            if (item == null)
+                return null;
+
+            if (item instanceof Records)
+                return (Records) item;
+
+            throw new SchemaException(item + " is not an instance of " + Records.class.getName());
         }
 
         @Override
         public int sizeOf(Object o) {
-            return 0;
+            if (o == null)
+                return 4;
+
+            Records records = (Records) o;
+            return 4 + records.sizeInBytes();
         }
 
 

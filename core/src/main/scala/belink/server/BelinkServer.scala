@@ -1,12 +1,15 @@
 package belink.server
 
+import java.util
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
 
 import belink.blockchain.BlockChainManager
+import belink.log.{LogConfig, LogManager}
 import belink.metrics.BelinkMetricsReporter
 import belink.network.SocketServer
 import belink.security.CredentialProvider
+import belink.security.auth.Authorizer
 import belink.utils.{BelinkScheduler, CoreUtils, Logging}
 import com.ynet.belink.common.metrics.{MetricConfig, Metrics, MetricsReporter, Sensor}
 import com.ynet.belink.common.utils.Time
@@ -16,6 +19,33 @@ import scala.collection.JavaConverters._
   * Created by goldratio on 27/06/2017.
   */
 object BelinkServer {
+
+  private[belink] def copyBelinkConfigToLog(belinkConfig: BelinkConfig): java.util.Map[String, Object] = {
+    val logProps = new util.HashMap[String, Object]()
+    logProps.put(LogConfig.SegmentBytesProp, belinkConfig.logSegmentBytes)
+    logProps.put(LogConfig.SegmentMsProp, belinkConfig.logRollTimeMillis)
+//    logProps.put(LogConfig.SegmentJitterMsProp, belinkConfig.logRollTimeJitterMillis)
+//    logProps.put(LogConfig.SegmentIndexBytesProp, belinkConfig.logIndexSizeMaxBytes)
+//    logProps.put(LogConfig.FlushMessagesProp, belinkConfig.logFlushIntervalMessages)
+//    logProps.put(LogConfig.FlushMsProp, belinkConfig.logFlushIntervalMs)
+//    logProps.put(LogConfig.RetentionBytesProp, belinkConfig.logRetentionBytes)
+//    logProps.put(LogConfig.RetentionMsProp, belinkConfig.logRetentionTimeMillis: java.lang.Long)
+//    logProps.put(LogConfig.MaxMessageBytesProp, belinkConfig.messageMaxBytes)
+//    logProps.put(LogConfig.IndexIntervalBytesProp, belinkConfig.logIndexIntervalBytes)
+//    logProps.put(LogConfig.DeleteRetentionMsProp, belinkConfig.logCleanerDeleteRetentionMs)
+//    logProps.put(LogConfig.MinCompactionLagMsProp, belinkConfig.logCleanerMinCompactionLagMs)
+//    logProps.put(LogConfig.FileDeleteDelayMsProp, belinkConfig.logDeleteDelayMs)
+//    logProps.put(LogConfig.MinCleanableDirtyRatioProp, belinkConfig.logCleanerMinCleanRatio)
+//    logProps.put(LogConfig.CleanupPolicyProp, belinkConfig.logCleanupPolicy)
+//    logProps.put(LogConfig.MinInSyncReplicasProp, belinkConfig.minInSyncReplicas)
+//    logProps.put(LogConfig.CompressionTypeProp, belinkConfig.compressionType)
+//    logProps.put(LogConfig.UncleanLeaderElectionEnableProp, belinkConfig.uncleanLeaderElectionEnable)
+//    logProps.put(LogConfig.PreAllocateEnableProp, belinkConfig.logPreAllocateEnable)
+//    logProps.put(LogConfig.MessageFormatVersionProp, belinkConfig.logMessageFormatVersion.version)
+//    logProps.put(LogConfig.MessageTimestampTypeProp, belinkConfig.logMessageTimestampType.name)
+//    logProps.put(LogConfig.MessageTimestampDifferenceMaxMsProp, belinkConfig.logMessageTimestampDifferenceMaxMs: java.lang.Long)
+    logProps
+  }
 
   private[server] def metricConfig(belinkConfig: BelinkConfig): MetricConfig = {
     new MetricConfig()
@@ -44,9 +74,15 @@ class BelinkServer(val config: BelinkConfig, time: Time = Time.SYSTEM,
   var socketServer: SocketServer = null
   var requestHandlerPool: BelinkRequestHandlerPool = null
 
+  var logManager: LogManager = null
+
+  var replicaManager: ReplicaManager = null
+
   var blockChainManager: BlockChainManager = null
 
   var credentialProvider: CredentialProvider = null
+
+  var authorizer: Option[Authorizer] = None
 
   def startup(): Unit = {
     try {
@@ -72,11 +108,26 @@ class BelinkServer(val config: BelinkConfig, time: Time = Time.SYSTEM,
 
         belinkScheduler.startup()
 
+        /* start log manager */
+        logManager = LogManager(config, belinkScheduler, time)
+        logManager.startup()
+
         socketServer = new SocketServer(config, metrics, time, credentialProvider)
         socketServer.startup()
 
+        /* start replica manager */
+        replicaManager = createReplicaManager(isShuttingDown)
+        replicaManager.startup()
+
+        /* Get the authorizer and initialize it if one is specified.*/
+        authorizer = Option(config.authorizerClassName).filter(_.nonEmpty).map { authorizerClassName =>
+          val authZ = CoreUtils.createObject[Authorizer](authorizerClassName)
+          authZ.configure(config.originals())
+          authZ
+        }
+
         /* start processing requests */
-        apis = new BelinkApis(socketServer.requestChannel)
+        apis = new BelinkApis(socketServer.requestChannel, replicaManager, authorizer)
         requestHandlerPool = new BelinkRequestHandlerPool(socketServer.requestChannel, apis, time,
           config.numIoThreads)
 
@@ -96,6 +147,9 @@ class BelinkServer(val config: BelinkConfig, time: Time = Time.SYSTEM,
         throw e
     }
   }
+
+  protected def createReplicaManager(isShuttingDown: AtomicBoolean): ReplicaManager =
+    new ReplicaManager(config, metrics, time, belinkScheduler, logManager, isShuttingDown)
 
 
   protected def createBlockChainManager(isShuttingDown: AtomicBoolean): BlockChainManager =

@@ -20,7 +20,7 @@ import java.io._
 import java.util.regex.Pattern
 
 import belink.server.epoch.EpochEntry
-import com.ynet.belink.common.Topic
+import com.ynet.belink.common.TopicPartition
 
 import scala.collection._
 
@@ -28,15 +28,15 @@ object OffsetCheckpointFile {
   private val WhiteSpacesPattern = Pattern.compile("\\s+")
   private[checkpoints] val CurrentVersion = 0
 
-  object Formatter extends CheckpointFileFormatter[(Topic, Long)] {
-    override def toLine(entry: (Topic, Long)): String = {
+  object Formatter extends CheckpointFileFormatter[(TopicPartition, Long)] {
+    override def toLine(entry: (TopicPartition, Long)): String = {
       s"${entry._1.topic} ${entry._2}"
     }
 
-    override def fromLine(line: String): Option[(Topic, Long)] = {
+    override def fromLine(line: String): Option[(TopicPartition, Long)] = {
       WhiteSpacesPattern.split(line) match {
-        case Array(topic, offset) =>
-          Some(new Topic(topic), offset.toLong)
+        case Array(topic, partition, offset) =>
+          Some(new TopicPartition(topic, partition.toInt), offset.toLong)
         case _ => None
       }
     }
@@ -52,11 +52,11 @@ trait OffsetCheckpoint {
   * This class persists a map of (Partition => Offsets) to a file (for a certain replica)
   */
 class OffsetCheckpointFile(val f: File) {
-  val checkpoint = new CheckpointFile[(Topic, Long)](f, OffsetCheckpointFile.CurrentVersion,
+  val checkpoint = new CheckpointFile[(TopicPartition, Long)](f, OffsetCheckpointFile.CurrentVersion,
     OffsetCheckpointFile.Formatter)
 
-  def write(offsets: Map[Topic, Long]): Unit = checkpoint.write(offsets.toSeq)
+  def write(offsets: Map[TopicPartition, Long]): Unit = checkpoint.write(offsets.toSeq)
 
-  def read(): Map[Topic, Long] = checkpoint.read().toMap
+  def read(): Map[TopicPartition, Long] = checkpoint.read().toMap
 
 }

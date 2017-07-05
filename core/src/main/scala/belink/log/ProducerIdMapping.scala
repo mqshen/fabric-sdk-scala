@@ -21,7 +21,7 @@ import java.nio.ByteBuffer
 import java.nio.file.Files
 
 import belink.utils.{Logging, nonthreadsafe}
-import com.ynet.belink.common.{BelinkException, Topic}
+import com.ynet.belink.common.{BelinkException, TopicPartition}
 import com.ynet.belink.common.errors.{DuplicateSequenceNumberException, OutOfOrderSequenceException, ProducerFencedException}
 import com.ynet.belink.common.protocol.types._
 import com.ynet.belink.common.record.RecordBatch
@@ -214,7 +214,7 @@ object ProducerIdMapping {
  */
 @nonthreadsafe
 class ProducerIdMapping(val config: LogConfig,
-                        val topicPartition: Topic,
+                        val topicPartition: TopicPartition,
                         val snapParentDir: File,
                         val maxPidExpirationMs: Int) extends Logging {
   import ProducerIdMapping._

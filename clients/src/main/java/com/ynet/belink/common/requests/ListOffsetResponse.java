@@ -16,7 +16,7 @@
  */
 package com.ynet.belink.common.requests;
 
-import com.ynet.belink.common.Topic;
+import com.ynet.belink.common.TopicPartition;
 import com.ynet.belink.common.protocol.ApiKeys;
 import com.ynet.belink.common.protocol.Errors;
 import com.ynet.belink.common.protocol.types.Struct;
@@ -105,12 +105,12 @@ public class ListOffsetResponse extends AbstractResponse {
         }
     }
 
-    private final Map<Topic, PartitionData> responseData;
+    private final Map<TopicPartition, PartitionData> responseData;
 
     /**
      * Constructor for all versions.
      */
-    public ListOffsetResponse(Map<Topic, PartitionData> responseData) {
+    public ListOffsetResponse(Map<TopicPartition, PartitionData> responseData) {
         this.responseData = responseData;
     }
 
@@ -121,6 +121,7 @@ public class ListOffsetResponse extends AbstractResponse {
             String topic = topicResponse.getString(TOPIC_KEY_NAME);
             for (Object partitionResponseObj : topicResponse.getArray(PARTITIONS_KEY_NAME)) {
                 Struct partitionResponse = (Struct) partitionResponseObj;
+                int partition = partitionResponse.getInt(PARTITION_KEY_NAME);
                 Errors error = Errors.forCode(partitionResponse.getShort(ERROR_CODE_KEY_NAME));
                 PartitionData partitionData;
                 if (partitionResponse.hasField(OFFSETS_KEY_NAME)) {
@@ -134,12 +135,12 @@ public class ListOffsetResponse extends AbstractResponse {
                     long offset = partitionResponse.getLong(OFFSET_KEY_NAME);
                     partitionData = new PartitionData(error, timestamp, offset);
                 }
-                responseData.put(new Topic(topic), partitionData);
+                responseData.put(new TopicPartition(topic, partition), partitionData);
             }
         }
     }
 
-    public Map<Topic, PartitionData> responseData() {
+    public Map<TopicPartition, PartitionData> responseData() {
         return responseData;
     }
 

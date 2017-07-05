@@ -20,6 +20,7 @@ package belink.log
 import java.util.{Collections, Locale, Properties}
 
 import belink.api.ApiVersion
+import belink.message.{BrokerCompressionCodec, Message}
 
 import scala.collection.JavaConverters._
 import belink.server.BelinkConfig
@@ -32,28 +33,28 @@ import scala.collection.mutable
 import com.ynet.belink.common.config.ConfigDef.{ConfigKey, ValidList, Validator}
 
 object Defaults {
-//  val SegmentSize = belink.server.Defaults.LogSegmentBytes
-//  val SegmentMs = belink.server.Defaults.LogRollHours * 60 * 60 * 1000L
-//  val SegmentJitterMs = belink.server.Defaults.LogRollJitterHours * 60 * 60 * 1000L
-//  val FlushInterval = belink.server.Defaults.LogFlushIntervalMessages
-//  val FlushMs = belink.server.Defaults.LogFlushSchedulerIntervalMs
-//  val RetentionSize = belink.server.Defaults.LogRetentionBytes
-//  val RetentionMs = belink.server.Defaults.LogRetentionHours * 60 * 60 * 1000L
-//  val MaxMessageSize = belink.server.Defaults.MessageMaxBytes
-//  val MaxIndexSize = belink.server.Defaults.LogIndexSizeMaxBytes
-//  val IndexInterval = belink.server.Defaults.LogIndexIntervalBytes
-//  val FileDeleteDelayMs = belink.server.Defaults.LogDeleteDelayMs
-//  val DeleteRetentionMs = belink.server.Defaults.LogCleanerDeleteRetentionMs
-//  val MinCompactionLagMs = belink.server.Defaults.LogCleanerMinCompactionLagMs
-//  val MinCleanableDirtyRatio = belink.server.Defaults.LogCleanerMinCleanRatio
-//  val Compact = belink.server.Defaults.LogCleanupPolicy
+  val SegmentSize = belink.server.Defaults.LogSegmentBytes
+  val SegmentMs = belink.server.Defaults.LogRollHours * 60 * 60 * 1000L
+  val SegmentJitterMs = belink.server.Defaults.LogRollJitterHours * 60 * 60 * 1000L
+  val FlushInterval = belink.server.Defaults.LogFlushIntervalMessages
+  val FlushMs = belink.server.Defaults.LogFlushSchedulerIntervalMs
+  val RetentionSize = belink.server.Defaults.LogRetentionBytes
+  val RetentionMs = belink.server.Defaults.LogRetentionHours * 60 * 60 * 1000L
+  val MaxMessageSize = belink.server.Defaults.MessageMaxBytes
+  val MaxIndexSize = belink.server.Defaults.LogIndexSizeMaxBytes
+  val IndexInterval = belink.server.Defaults.LogIndexIntervalBytes
+  val FileDeleteDelayMs = belink.server.Defaults.LogDeleteDelayMs
+  val DeleteRetentionMs = belink.server.Defaults.LogCleanerDeleteRetentionMs
+  val MinCompactionLagMs = belink.server.Defaults.LogCleanerMinCompactionLagMs
+  val MinCleanableDirtyRatio = belink.server.Defaults.LogCleanerMinCleanRatio
+  val Compact = belink.server.Defaults.LogCleanupPolicy
 //  val UncleanLeaderElectionEnable = belink.server.Defaults.UncleanLeaderElectionEnable
 //  val MinInSyncReplicas = belink.server.Defaults.MinInSyncReplicas
-//  val CompressionType = belink.server.Defaults.CompressionType
-//  val PreAllocateEnable = belink.server.Defaults.LogPreAllocateEnable
-//  val MessageFormatVersion = belink.server.Defaults.LogMessageFormatVersion
-//  val MessageTimestampType = belink.server.Defaults.LogMessageTimestampType
-//  val MessageTimestampDifferenceMaxMs = belink.server.Defaults.LogMessageTimestampDifferenceMaxMs
+  val CompressionType = belink.server.Defaults.CompressionType
+  val PreAllocateEnable = belink.server.Defaults.LogPreAllocateEnable
+  val MessageFormatVersion = belink.server.Defaults.LogMessageFormatVersion
+  val MessageTimestampType = belink.server.Defaults.LogMessageTimestampType
+  val MessageTimestampDifferenceMaxMs = belink.server.Defaults.LogMessageTimestampDifferenceMaxMs
 //  val LeaderReplicationThrottledReplicas = Collections.emptyList[String]()
 //  val FollowerReplicationThrottledReplicas = Collections.emptyList[String]()
 //  val MaxIdMapSnapshots = belink.server.Defaults.MaxIdMapSnapshots
@@ -62,7 +63,7 @@ object Defaults {
 case class LogConfig(props: java.util.Map[_, _]) extends AbstractConfig(LogConfig.configDef, props, false) {
   /**
    * Important note: Any configuration parameter that is passed along from belinkConfig to LogConfig
-   * should also go in [[belink.server.belinkServer.copybelinkConfigToLog]].
+   * should also go in [[belink.server.BelinkServer.copyBelinkConfigToLog()]].
    */
   val segmentSize = getInt(LogConfig.SegmentBytesProp)
   val segmentMs = getLong(LogConfig.SegmentMsProp)
@@ -80,15 +81,15 @@ case class LogConfig(props: java.util.Map[_, _]) extends AbstractConfig(LogConfi
   val minCleanableRatio = getDouble(LogConfig.MinCleanableDirtyRatioProp)
   val compact = getList(LogConfig.CleanupPolicyProp).asScala.map(_.toLowerCase(Locale.ROOT)).contains(LogConfig.Compact)
   val delete = getList(LogConfig.CleanupPolicyProp).asScala.map(_.toLowerCase(Locale.ROOT)).contains(LogConfig.Delete)
-  val uncleanLeaderElectionEnable = getBoolean(LogConfig.UncleanLeaderElectionEnableProp)
-  val minInSyncReplicas = getInt(LogConfig.MinInSyncReplicasProp)
+//  val uncleanLeaderElectionEnable = getBoolean(LogConfig.UncleanLeaderElectionEnableProp)
+//  val minInSyncReplicas = getInt(LogConfig.MinInSyncReplicasProp)
   val compressionType = getString(LogConfig.CompressionTypeProp).toLowerCase(Locale.ROOT)
   val preallocate = getBoolean(LogConfig.PreAllocateEnableProp)
   val messageFormatVersion = ApiVersion(getString(LogConfig.MessageFormatVersionProp))
   val messageTimestampType = TimestampType.forName(getString(LogConfig.MessageTimestampTypeProp))
   val messageTimestampDifferenceMaxMs = getLong(LogConfig.MessageTimestampDifferenceMaxMsProp).longValue
-  val LeaderReplicationThrottledReplicas = getList(LogConfig.LeaderReplicationThrottledReplicasProp)
-  val FollowerReplicationThrottledReplicas = getList(LogConfig.FollowerReplicationThrottledReplicasProp)
+//  val LeaderReplicationThrottledReplicas = getList(LogConfig.LeaderReplicationThrottledReplicasProp)
+//  val FollowerReplicationThrottledReplicas = getList(LogConfig.FollowerReplicationThrottledReplicasProp)
 
   def randomSegmentJitter: Long =
     if (segmentJitterMs == 0) 0 else Utils.abs(scala.util.Random.nextInt()) % math.min(segmentJitterMs, segmentMs)
@@ -188,12 +189,12 @@ object LogConfig {
   val UncleanLeaderElectionEnableDoc = "Indicates whether to enable replicas not in the ISR set to be elected as" +
     " leader as a last resort, even though doing so may result in data loss"
 //  val MinInSyncReplicasDoc = BelinkConfig.MinInSyncReplicasDoc
-//  val CompressionTypeDoc = "Specify the final compression type for a given topic. This configuration accepts the " +
-//    "standard compression codecs ('gzip', 'snappy', lz4). It additionally accepts 'uncompressed' which is equivalent to " +
-//    "no compression; and 'producer' which means retain the original compression codec set by the producer."
-//  val PreAllocateEnableDoc ="Should pre allocate file when create new segment?"
-//  val MessageFormatVersionDoc = BelinkConfig.LogMessageFormatVersionDoc
-//  val MessageTimestampTypeDoc = BelinkConfig.LogMessageTimestampTypeDoc
+  val CompressionTypeDoc = "Specify the final compression type for a given topic. This configuration accepts the " +
+    "standard compression codecs ('gzip', 'snappy', lz4). It additionally accepts 'uncompressed' which is equivalent to " +
+    "no compression; and 'producer' which means retain the original compression codec set by the producer."
+  val PreAllocateEnableDoc ="Should pre allocate file when create new segment?"
+  val MessageFormatVersionDoc = BelinkConfig.LogMessageFormatVersionDoc
+  val MessageTimestampTypeDoc = BelinkConfig.LogMessageTimestampTypeDoc
   val MessageTimestampDifferenceMaxMsDoc = "The maximum difference allowed between the timestamp when a broker receives " +
     "a message and the timestamp specified in the message. If message.timestamp.type=CreateTime, a message will be rejected " +
     "if the difference in timestamp exceeds this threshold. This configuration is ignored if message.timestamp.type=LogAppendTime."
@@ -246,52 +247,52 @@ object LogConfig {
     import com.ynet.belink.common.config.ConfigDef.ValidString._
 
     new LogConfigDef()
-//      .define(SegmentBytesProp, INT, Defaults.SegmentSize, atLeast(Message.MinMessageOverhead), MEDIUM,
-//        SegmentSizeDoc, BelinkConfig.LogSegmentBytesProp)
-//      .define(SegmentMsProp, LONG, Defaults.SegmentMs, atLeast(0), MEDIUM, SegmentMsDoc,
-//        BelinkConfig.LogRollTimeMillisProp)
-//      .define(SegmentJitterMsProp, LONG, Defaults.SegmentJitterMs, atLeast(0), MEDIUM, SegmentJitterMsDoc,
-//        BelinkConfig.LogRollTimeJitterMillisProp)
-//      .define(SegmentIndexBytesProp, INT, Defaults.MaxIndexSize, atLeast(0), MEDIUM, MaxIndexSizeDoc,
-//        BelinkConfig.LogIndexSizeMaxBytesProp)
-//      .define(FlushMessagesProp, LONG, Defaults.FlushInterval, atLeast(0), MEDIUM, FlushIntervalDoc,
-//        BelinkConfig.LogFlushIntervalMessagesProp)
-//      .define(FlushMsProp, LONG, Defaults.FlushMs, atLeast(0), MEDIUM, FlushMsDoc,
-//        BelinkConfig.LogFlushIntervalMsProp)
+      .define(SegmentBytesProp, INT, Defaults.SegmentSize, atLeast(Message.MinMessageOverhead), MEDIUM,
+        SegmentSizeDoc, BelinkConfig.LogSegmentBytesProp)
+      .define(SegmentMsProp, LONG, Defaults.SegmentMs, atLeast(0), MEDIUM, SegmentMsDoc,
+        BelinkConfig.LogRollTimeMillisProp)
+      .define(SegmentJitterMsProp, LONG, Defaults.SegmentJitterMs, atLeast(0), MEDIUM, SegmentJitterMsDoc,
+        BelinkConfig.LogRollTimeJitterMillisProp)
+      .define(SegmentIndexBytesProp, INT, Defaults.MaxIndexSize, atLeast(0), MEDIUM, MaxIndexSizeDoc,
+        BelinkConfig.LogIndexSizeMaxBytesProp)
+      .define(FlushMessagesProp, LONG, Defaults.FlushInterval, atLeast(0), MEDIUM, FlushIntervalDoc,
+        BelinkConfig.LogFlushIntervalMessagesProp)
+      .define(FlushMsProp, LONG, Defaults.FlushMs, atLeast(0), MEDIUM, FlushMsDoc,
+        BelinkConfig.LogFlushIntervalMsProp)
 //      // can be negative. See belink.log.LogManager.cleanupSegmentsToMaintainSize
-//      .define(RetentionBytesProp, LONG, Defaults.RetentionSize, MEDIUM, RetentionSizeDoc,
-//        BelinkConfig.LogRetentionBytesProp)
+      .define(RetentionBytesProp, LONG, Defaults.RetentionSize, MEDIUM, RetentionSizeDoc,
+        BelinkConfig.LogRetentionBytesProp)
 //      // can be negative. See belink.log.LogManager.cleanupExpiredSegments
-//      .define(RetentionMsProp, LONG, Defaults.RetentionMs, MEDIUM, RetentionMsDoc,
-//        BelinkConfig.LogRetentionTimeMillisProp)
-//      .define(MaxMessageBytesProp, INT, Defaults.MaxMessageSize, atLeast(0), MEDIUM, MaxMessageSizeDoc,
-//        BelinkConfig.MessageMaxBytesProp)
-//      .define(IndexIntervalBytesProp, INT, Defaults.IndexInterval, atLeast(0), MEDIUM, IndexIntervalDoc,
-//        BelinkConfig.LogIndexIntervalBytesProp)
-//      .define(DeleteRetentionMsProp, LONG, Defaults.DeleteRetentionMs, atLeast(0), MEDIUM,
-//        DeleteRetentionMsDoc, BelinkConfig.LogCleanerDeleteRetentionMsProp)
-//      .define(MinCompactionLagMsProp, LONG, Defaults.MinCompactionLagMs, atLeast(0), MEDIUM, MinCompactionLagMsDoc,
-//        BelinkConfig.LogCleanerMinCompactionLagMsProp)
-//      .define(FileDeleteDelayMsProp, LONG, Defaults.FileDeleteDelayMs, atLeast(0), MEDIUM, FileDeleteDelayMsDoc,
-//        BelinkConfig.LogDeleteDelayMsProp)
-//      .define(MinCleanableDirtyRatioProp, DOUBLE, Defaults.MinCleanableDirtyRatio, between(0, 1), MEDIUM,
-//        MinCleanableRatioDoc, BelinkConfig.LogCleanerMinCleanRatioProp)
-//      .define(CleanupPolicyProp, LIST, Defaults.Compact, ValidList.in(LogConfig.Compact, LogConfig.Delete), MEDIUM, CompactDoc,
-//        BelinkConfig.LogCleanupPolicyProp)
+      .define(RetentionMsProp, LONG, Defaults.RetentionMs, MEDIUM, RetentionMsDoc,
+        BelinkConfig.LogRetentionTimeMillisProp)
+      .define(MaxMessageBytesProp, INT, Defaults.MaxMessageSize, atLeast(0), MEDIUM, MaxMessageSizeDoc,
+        BelinkConfig.MessageMaxBytesProp)
+      .define(IndexIntervalBytesProp, INT, Defaults.IndexInterval, atLeast(0), MEDIUM, IndexIntervalDoc,
+        BelinkConfig.LogIndexIntervalBytesProp)
+      .define(DeleteRetentionMsProp, LONG, Defaults.DeleteRetentionMs, atLeast(0), MEDIUM,
+        DeleteRetentionMsDoc, BelinkConfig.LogCleanerDeleteRetentionMsProp)
+      .define(MinCompactionLagMsProp, LONG, Defaults.MinCompactionLagMs, atLeast(0), MEDIUM, MinCompactionLagMsDoc,
+        BelinkConfig.LogCleanerMinCompactionLagMsProp)
+      .define(FileDeleteDelayMsProp, LONG, Defaults.FileDeleteDelayMs, atLeast(0), MEDIUM, FileDeleteDelayMsDoc,
+        BelinkConfig.LogDeleteDelayMsProp)
+      .define(MinCleanableDirtyRatioProp, DOUBLE, Defaults.MinCleanableDirtyRatio, between(0, 1), MEDIUM,
+        MinCleanableRatioDoc, BelinkConfig.LogCleanerMinCleanRatioProp)
+      .define(CleanupPolicyProp, LIST, Defaults.Compact, ValidList.in(LogConfig.Compact, LogConfig.Delete), MEDIUM, CompactDoc,
+        BelinkConfig.LogCleanupPolicyProp)
 //      .define(UncleanLeaderElectionEnableProp, BOOLEAN, Defaults.UncleanLeaderElectionEnable,
 //        MEDIUM, UncleanLeaderElectionEnableDoc, BelinkConfig.UncleanLeaderElectionEnableProp)
 //      .define(MinInSyncReplicasProp, INT, Defaults.MinInSyncReplicas, atLeast(1), MEDIUM, MinInSyncReplicasDoc,
 //        BelinkConfig.MinInSyncReplicasProp)
-//      .define(CompressionTypeProp, STRING, Defaults.CompressionType, in(BrokerCompressionCodec.brokerCompressionOptions:_*),
-//        MEDIUM, CompressionTypeDoc, BelinkConfig.CompressionTypeProp)
-//      .define(PreAllocateEnableProp, BOOLEAN, Defaults.PreAllocateEnable, MEDIUM, PreAllocateEnableDoc,
-//        BelinkConfig.LogPreAllocateProp)
-//      .define(MessageFormatVersionProp, STRING, Defaults.MessageFormatVersion, MEDIUM, MessageFormatVersionDoc,
-//        BelinkConfig.LogMessageFormatVersionProp)
-//      .define(MessageTimestampTypeProp, STRING, Defaults.MessageTimestampType, MEDIUM, MessageTimestampTypeDoc,
-//        BelinkConfig.LogMessageTimestampTypeProp)
-//      .define(MessageTimestampDifferenceMaxMsProp, LONG, Defaults.MessageTimestampDifferenceMaxMs,
-//        atLeast(0), MEDIUM, MessageTimestampDifferenceMaxMsDoc, BelinkConfig.LogMessageTimestampDifferenceMaxMsProp)
+      .define(CompressionTypeProp, STRING, Defaults.CompressionType, in(BrokerCompressionCodec.brokerCompressionOptions:_*),
+        MEDIUM, CompressionTypeDoc, BelinkConfig.CompressionTypeProp)
+      .define(PreAllocateEnableProp, BOOLEAN, Defaults.PreAllocateEnable, MEDIUM, PreAllocateEnableDoc,
+        BelinkConfig.LogPreAllocateProp)
+      .define(MessageFormatVersionProp, STRING, Defaults.MessageFormatVersion, MEDIUM, MessageFormatVersionDoc,
+        BelinkConfig.LogMessageFormatVersionProp)
+      .define(MessageTimestampTypeProp, STRING, Defaults.MessageTimestampType, MEDIUM, MessageTimestampTypeDoc,
+        BelinkConfig.LogMessageTimestampTypeProp)
+      .define(MessageTimestampDifferenceMaxMsProp, LONG, Defaults.MessageTimestampDifferenceMaxMs,
+        atLeast(0), MEDIUM, MessageTimestampDifferenceMaxMsDoc, BelinkConfig.LogMessageTimestampDifferenceMaxMsProp)
 //      .define(LeaderReplicationThrottledReplicasProp, LIST, Defaults.LeaderReplicationThrottledReplicas, ThrottledReplicaListValidator, MEDIUM,
 //        LeaderReplicationThrottledReplicasDoc, LeaderReplicationThrottledReplicasProp)
 //      .define(FollowerReplicationThrottledReplicasProp, LIST, Defaults.FollowerReplicationThrottledReplicas, ThrottledReplicaListValidator, MEDIUM,

@@ -20,7 +20,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock
 
 import belink.server.LogOffsetMetadata
 import belink.server.checkpoints.LeaderEpochCheckpoint
-import com.ynet.belink.common.Topic
+import com.ynet.belink.common.TopicPartition
 import com.ynet.belink.common.requests.EpochEndOffset.{UNDEFINED_EPOCH, UNDEFINED_EPOCH_OFFSET}
 import belink.utils.CoreUtils._
 import belink.utils.Logging
@@ -47,7 +47,7 @@ trait LeaderEpochCache {
   * @param leo a function that determines the log end offset
   * @param checkpoint the checkpoint file
   */
-class LeaderEpochFileCache(topicPartition: Topic, leo: () => LogOffsetMetadata, checkpoint: LeaderEpochCheckpoint) extends LeaderEpochCache with Logging {
+class LeaderEpochFileCache(topicPartition: TopicPartition, leo: () => LogOffsetMetadata, checkpoint: LeaderEpochCheckpoint) extends LeaderEpochCache with Logging {
   private val lock = new ReentrantReadWriteLock()
   private var epochs: ListBuffer[EpochEntry] = lock.synchronized { ListBuffer(checkpoint.read(): _*) }
   private var cachedLatestEpoch: Option[Int] = None //epoch which has yet to be assigned to a message.

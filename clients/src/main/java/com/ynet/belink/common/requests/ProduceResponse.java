@@ -16,7 +16,7 @@
  */
 package com.ynet.belink.common.requests;
 
-import com.ynet.belink.common.Topic;
+import com.ynet.belink.common.TopicPartition;
 import com.ynet.belink.common.protocol.ApiKeys;
 import com.ynet.belink.common.protocol.Errors;
 import com.ynet.belink.common.protocol.types.Struct;
@@ -66,14 +66,14 @@ public class ProduceResponse extends AbstractResponse {
     private static final String BASE_OFFSET_KEY_NAME = "base_offset";
     private static final String LOG_APPEND_TIME_KEY_NAME = "log_append_time";
 
-    private final Map<Topic, PartitionResponse> responses;
+    private final Map<TopicPartition, PartitionResponse> responses;
     private final int throttleTime;
 
     /**
      * Constructor for Version 0
      * @param responses Produced data grouped by topic-partition
      */
-    public ProduceResponse(Map<Topic, PartitionResponse> responses) {
+    public ProduceResponse(Map<TopicPartition, PartitionResponse> responses) {
         this(responses, DEFAULT_THROTTLE_TIME);
     }
 
@@ -82,7 +82,7 @@ public class ProduceResponse extends AbstractResponse {
      * @param responses Produced data grouped by topic-partition
      * @param throttleTime Time in milliseconds the response was throttled
      */
-    public ProduceResponse(Map<Topic, PartitionResponse> responses, int throttleTime) {
+    public ProduceResponse(Map<TopicPartition, PartitionResponse> responses, int throttleTime) {
         this.responses = responses;
         this.throttleTime = throttleTime;
     }
@@ -97,10 +97,11 @@ public class ProduceResponse extends AbstractResponse {
             String topic = topicRespStruct.getString(TOPIC_KEY_NAME);
             for (Object partResponse : topicRespStruct.getArray(PARTITION_RESPONSES_KEY_NAME)) {
                 Struct partRespStruct = (Struct) partResponse;
+                int partition = partRespStruct.getInt(PARTITION_KEY_NAME);
                 Errors error = Errors.forCode(partRespStruct.getShort(ERROR_CODE_KEY_NAME));
                 long offset = partRespStruct.getLong(BASE_OFFSET_KEY_NAME);
                 long logAppendTime = partRespStruct.getLong(LOG_APPEND_TIME_KEY_NAME);
-                Topic tp = new Topic(topic);
+                TopicPartition tp = new TopicPartition(topic, partition);
                 responses.put(tp, new PartitionResponse(error, offset, logAppendTime));
             }
         }
@@ -137,7 +138,7 @@ public class ProduceResponse extends AbstractResponse {
         return struct;
     }
 
-    public Map<Topic, PartitionResponse> responses() {
+    public Map<TopicPartition, PartitionResponse> responses() {
         return this.responses;
     }
 
