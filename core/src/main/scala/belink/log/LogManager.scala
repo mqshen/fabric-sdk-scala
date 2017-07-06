@@ -23,7 +23,7 @@ import java.util.Properties
 import java.util.concurrent._
 
 import belink.common.{BelinkException, BelinkStorageException}
-import belink.server.{BelinkConfig, BelinkServer}
+import belink.server.{BelinkConfig, BelinkServer, BrokerTopicStats}
 import belink.server.checkpoints.OffsetCheckpointFile
 import belink.utils._
 import com.ynet.belink.common.TopicPartition
@@ -54,6 +54,8 @@ class LogManager(val logDirs: Array[File],
                  val retentionCheckMs: Long,
                  val maxPidExpirationMs: Int,
                  scheduler: Scheduler,
+
+                 brokerTopicStats: BrokerTopicStats,
                  time: Time) extends Logging {
   val RecoveryPointCheckpointFile = "recovery-point-offset-checkpoint"
   val LogStartOffsetCheckpointFile = "log-start-offset-checkpoint"
@@ -167,14 +169,15 @@ class LogManager(val logDirs: Array[File],
           val logRecoveryPoint = recoveryPoints.getOrElse(topicPartition, 0L)
           val logStartOffset = logStartOffsets.getOrElse(topicPartition, 0L)
 
-          val current = new Log(
+          val current = Log(
             dir = logDir,
             config = config,
             logStartOffset = logStartOffset,
             recoveryPoint = logRecoveryPoint,
-            maxPidExpirationMs = maxPidExpirationMs,
+            maxProducerIdExpirationMs = maxPidExpirationMs,
             scheduler = scheduler,
-            time = time)
+            time = time,
+            brokerTopicStats = brokerTopicStats)
           if (logDir.getName.endsWith(Log.DeleteDirSuffix)) {
             this.logsToBeDeleted.add(current)
           } else {
@@ -410,14 +413,15 @@ class LogManager(val logDirs: Array[File],
         val dir = new File(dataDir, topicPartition.topic + "-" + topicPartition.partition)
         Files.createDirectories(dir.toPath)
 
-        val log = new Log(
+        val log = Log(
           dir = dir,
           config = config,
           logStartOffset = 0L,
           recoveryPoint = 0L,
-          maxPidExpirationMs = maxPidExpirationMs,
+          maxProducerIdExpirationMs = maxPidExpirationMs,
           scheduler = scheduler,
-          time = time)
+          time = time,
+          brokerTopicStats = brokerTopicStats)
         logs.put(topicPartition, log)
         info("Created log for partition [%s,%d] in %s with properties {%s}."
           .format(topicPartition.topic,
@@ -576,7 +580,8 @@ class LogManager(val logDirs: Array[File],
 object LogManager {
   def apply(config: BelinkConfig,
             belinkScheduler: BelinkScheduler,
-            time: Time): LogManager = {
+            time: Time,
+            brokerTopicStats: BrokerTopicStats): LogManager = {
     val defaultProps = BelinkServer.copyBelinkConfigToLog(config)
     val defaultLogConfig = LogConfig(defaultProps)
 
@@ -600,6 +605,7 @@ object LogManager {
       retentionCheckMs = config.logCleanupIntervalMs,
       maxPidExpirationMs = config.transactionIdExpirationMs,
       scheduler = belinkScheduler,
+      brokerTopicStats = brokerTopicStats,
       time = time)
   }
 }

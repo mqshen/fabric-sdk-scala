@@ -2,16 +2,17 @@ package belink.network
 
 import java.net.InetAddress
 import java.nio.ByteBuffer
-import java.util.concurrent.{ArrayBlockingQueue, TimeUnit}
+import java.util.concurrent.{ArrayBlockingQueue, BlockingQueue, LinkedBlockingQueue, TimeUnit}
 
 import belink.api.{ControlledShutdownRequest, RequestOrResponse}
 import belink.server.QuotaId
 import belink.utils.{Logging, NotNothing}
 import com.ynet.belink.common.errors.InvalidRequestException
-import com.ynet.belink.common.network.ListenerName
+import com.ynet.belink.common.network.{ListenerName, Send}
 import com.ynet.belink.common.protocol.{ApiKeys, Protocol, SecurityProtocol}
-import com.ynet.belink.common.requests.{AbstractRequest, ApiVersionsRequest, RequestAndSize, RequestHeader}
+import com.ynet.belink.common.requests._
 import com.ynet.belink.common.security.auth.BelinkPrincipal
+import com.ynet.belink.common.utils.Time
 
 import scala.reflect.ClassTag
 
@@ -34,6 +35,34 @@ object RequestChannel extends Logging {
     ByteBuffer.wrap("".getBytes())
   }
 
+  case class Response(request: Request, responseSend: Option[Send], responseAction: ResponseAction) {
+    request.responseCompleteTimeNanos = Time.SYSTEM.nanoseconds
+    if (request.apiLocalCompleteTimeNanos == -1L) request.apiLocalCompleteTimeNanos = Time.SYSTEM.nanoseconds
+
+    def processor: Int = request.processor
+  }
+
+  object Response {
+
+    def apply(request: Request, responseSend: Send): Response = {
+      require(request != null, "request should be non null")
+      require(responseSend != null, "responseSend should be non null")
+      new Response(request, Some(responseSend), SendAction)
+    }
+
+    def apply(request: Request, response: AbstractResponse): Response = {
+      require(request != null, "request should be non null")
+      require(response != null, "response should be non null")
+      apply(request, response.toSend(request.connectionId, request.header))
+    }
+
+  }
+
+  trait ResponseAction
+  case object SendAction extends ResponseAction
+  case object NoOpAction extends ResponseAction
+  case object CloseConnectionAction extends ResponseAction
+
   case class Session(principal: BelinkPrincipal, clientAddress: InetAddress) {
     val sanitizedUser = QuotaId.sanitize(principal.getName)
   }
@@ -43,11 +72,12 @@ object RequestChannel extends Logging {
   case class Request(processor: Int, connectionId: String, session: Session, private var buffer: ByteBuffer,
                      startTimeMs: Long, listenerName: ListenerName, securityProtocol: SecurityProtocol) {
 
-    @volatile var requestDequeueTimeMs = -1L
-    @volatile var apiLocalCompleteTimeMs = -1L
-    @volatile var responseCompleteTimeMs = -1L
-    @volatile var responseDequeueTimeMs = -1L
-    @volatile var apiRemoteCompleteTimeMs = -1L
+    @volatile var requestDequeueTimeNanos = -1L
+    @volatile var apiLocalCompleteTimeNanos = -1L
+    @volatile var responseCompleteTimeNanos = -1L
+    @volatile var responseDequeueTimeNanos = -1L
+    @volatile var apiRemoteCompleteTimeNanos = -1L
+    @volatile var recordNetworkThreadTimeCallback: Option[Long => Unit] = None
 
     val requestId = buffer.getShort()
 
@@ -97,19 +127,46 @@ object RequestChannel extends Logging {
         s"$header -- ${body[AbstractRequest].toString(details)}"
     }
 
+    def requestThreadTimeNanos = {
+      if (apiLocalCompleteTimeNanos == -1L) apiLocalCompleteTimeNanos = Time.SYSTEM.nanoseconds
+      math.max(apiLocalCompleteTimeNanos - requestDequeueTimeNanos, 0L)
+    }
+
   }
 
 }
 
 class RequestChannel(val numProcessors: Int, val queueSize: Int) {
+  private var responseListeners: List[(Int) => Unit] = Nil
   private val requestQueue = new ArrayBlockingQueue[RequestChannel.Request](queueSize)
+  private val responseQueues = new Array[BlockingQueue[RequestChannel.Response]](numProcessors)
+  for(i <- 0 until numProcessors)
+    responseQueues(i) = new LinkedBlockingQueue[RequestChannel.Response]()
 
   def sendRequest(request: RequestChannel.Request) {
     requestQueue.put(request)
   }
 
+  def addResponseListener(onResponse: Int => Unit) {
+    responseListeners ::= onResponse
+  }
+
+  /** Send a response back to the socket server to be sent over the network */
+  def sendResponse(response: RequestChannel.Response) {
+    responseQueues(response.processor).put(response)
+    for(onResponse <- responseListeners)
+      onResponse(response.processor)
+  }
+
   /** Get the next request or block until specified time has elapsed */
   def receiveRequest(timeout: Long): RequestChannel.Request =
     requestQueue.poll(timeout, TimeUnit.MILLISECONDS)
+
+  def receiveResponse(processor: Int): RequestChannel.Response = {
+    val response = responseQueues(processor).poll()
+    if (response != null)
+      response.request.responseDequeueTimeNanos = Time.SYSTEM.nanoseconds
+    response
+  }
 
 }

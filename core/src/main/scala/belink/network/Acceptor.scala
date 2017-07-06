@@ -6,6 +6,7 @@ import java.nio.channels.{SelectionKey, ServerSocketChannel, Selector => NSelect
 import belink.cluster.EndPoint
 import com.ynet.belink.common.BelinkException
 import com.ynet.belink.common.network.Selectable
+import com.ynet.belink.common.utils.Utils
 
 import scala.util.control.ControlThrowable
 
@@ -19,6 +20,12 @@ private[belink] class Acceptor(val endPoint: EndPoint,
                               connectionQuotas: ConnectionQuotas) extends AbstractServerThread(connectionQuotas) {
   private val nioSelector = NSelector.open()
   val serverChannel = openServerSocket(endPoint.host, endPoint.port)
+
+  this.synchronized {
+    processors.foreach { processor =>
+      Utils.newThread("kafka-network-thread-%s-%d".format(endPoint.securityProtocol.toString, processor.id), processor, false).start()
+    }
+  }
 
   private def openServerSocket(host: String, port: Int): ServerSocketChannel = {
     val socketAddress =

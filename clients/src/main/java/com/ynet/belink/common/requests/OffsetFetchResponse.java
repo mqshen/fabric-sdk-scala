@@ -16,11 +16,11 @@
  */
 package com.ynet.belink.common.requests;
 
-import  com.ynet.belink.common.TopicPartition;
-import  com.ynet.belink.common.protocol.ApiKeys;
-import  com.ynet.belink.common.protocol.Errors;
-import  com.ynet.belink.common.protocol.types.Struct;
-import  com.ynet.belink.common.utils.CollectionUtils;
+import com.ynet.belink.common.TopicPartition;
+import com.ynet.belink.common.protocol.ApiKeys;
+import com.ynet.belink.common.protocol.Errors;
+import com.ynet.belink.common.protocol.types.Struct;
+import com.ynet.belink.common.utils.CollectionUtils;
 
 import java.nio.ByteBuffer;
 import java.util.*;
@@ -51,9 +51,9 @@ public class OffsetFetchResponse extends AbstractResponse {
      *   - UNKNOWN_TOPIC_OR_PARTITION (3)
      *
      * - Group or coordinator errors:
-     *   - GROUP_LOAD_IN_PROGRESS (14)
-     *   - GROUP_COORDINATOR_NOT_AVAILABLE (15)
-     *   - NOT_COORDINATOR_FOR_GROUP (16)
+     *   - COORDINATOR_LOAD_IN_PROGRESS (14)
+     *   - COORDINATOR_NOT_AVAILABLE (15)
+     *   - NOT_COORDINATOR (16)
      *   - GROUP_AUTHORIZATION_FAILED (30)
      */
 
@@ -62,6 +62,7 @@ public class OffsetFetchResponse extends AbstractResponse {
 
     private final Map<TopicPartition, PartitionData> responseData;
     private final Errors error;
+    private final int throttleTimeMs;
 
     public static final class PartitionData {
         public final long offset;
@@ -80,16 +81,28 @@ public class OffsetFetchResponse extends AbstractResponse {
     }
 
     /**
-     * Constructor for all versions.
+     * Constructor for all versions without throttle time.
      * @param error Potential coordinator or group level error code (for api version 2 and later)
      * @param responseData Fetched offset information grouped by topic-partition
      */
     public OffsetFetchResponse(Errors error, Map<TopicPartition, PartitionData> responseData) {
+        this(DEFAULT_THROTTLE_TIME, error, responseData);
+    }
+
+    /**
+     * Constructor with throttle time
+     * @param throttleTimeMs The time in milliseconds that this response was throttled
+     * @param error Potential coordinator or group level error code (for api version 2 and later)
+     * @param responseData Fetched offset information grouped by topic-partition
+     */
+    public OffsetFetchResponse(int throttleTimeMs, Errors error, Map<TopicPartition, PartitionData> responseData) {
+        this.throttleTimeMs = throttleTimeMs;
         this.responseData = responseData;
         this.error = error;
     }
 
     public OffsetFetchResponse(Struct struct) {
+        this.throttleTimeMs = struct.hasField(THROTTLE_TIME_KEY_NAME) ? struct.getInt(THROTTLE_TIME_KEY_NAME) : DEFAULT_THROTTLE_TIME;
         Errors topLevelError = Errors.NONE;
         this.responseData = new HashMap<>();
         for (Object topicResponseObj : struct.getArray(RESPONSES_KEY_NAME)) {
@@ -123,6 +136,10 @@ public class OffsetFetchResponse extends AbstractResponse {
         }
     }
 
+    public int throttleTimeMs() {
+        return throttleTimeMs;
+    }
+
     public boolean hasError() {
         return this.error != Errors.NONE;
     }
@@ -142,6 +159,8 @@ public class OffsetFetchResponse extends AbstractResponse {
     @Override
     protected Struct toStruct(short version) {
         Struct struct = new Struct(ApiKeys.OFFSET_FETCH.responseSchema(version));
+        if (struct.hasField(THROTTLE_TIME_KEY_NAME))
+            struct.set(THROTTLE_TIME_KEY_NAME, throttleTimeMs);
 
         Map<String, Map<Integer, PartitionData>> topicsData = CollectionUtils.groupDataByTopic(responseData);
         List<Struct> topicArray = new ArrayList<>();

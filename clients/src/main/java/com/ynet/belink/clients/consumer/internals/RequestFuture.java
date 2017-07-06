@@ -16,8 +16,8 @@
  */
 package com.ynet.belink.clients.consumer.internals;
 
-import  com.ynet.belink.common.errors.RetriableException;
-import  com.ynet.belink.common.protocol.Errors;
+import com.ynet.belink.common.errors.RetriableException;
+import com.ynet.belink.common.protocol.Errors;
 
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
@@ -240,7 +240,7 @@ public class RequestFuture<T> implements ConsumerNetworkClient.PollCondition {
     }
 
     public static <T> RequestFuture<T> coordinatorNotAvailable() {
-        return failure(Errors.GROUP_COORDINATOR_NOT_AVAILABLE.exception());
+        return failure(Errors.COORDINATOR_NOT_AVAILABLE.exception());
     }
 
     public static <T> RequestFuture<T> leaderNotAvailable() {

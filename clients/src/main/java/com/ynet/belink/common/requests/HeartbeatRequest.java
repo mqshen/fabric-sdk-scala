@@ -16,9 +16,9 @@
  */
 package com.ynet.belink.common.requests;
 
-import  com.ynet.belink.common.protocol.ApiKeys;
-import  com.ynet.belink.common.protocol.Errors;
-import  com.ynet.belink.common.protocol.types.Struct;
+import com.ynet.belink.common.protocol.ApiKeys;
+import com.ynet.belink.common.protocol.Errors;
+import com.ynet.belink.common.protocol.types.Struct;
 
 import java.nio.ByteBuffer;
 
@@ -75,11 +75,13 @@ public class HeartbeatRequest extends AbstractRequest {
     }
 
     @Override
-    public AbstractResponse getErrorResponse(Throwable e) {
+    public AbstractResponse getErrorResponse(int throttleTimeMs, Throwable e) {
         short versionId = version();
         switch (versionId) {
             case 0:
                 return new HeartbeatResponse(Errors.forException(e));
+            case 1:
+                return new HeartbeatResponse(throttleTimeMs, Errors.forException(e));
             default:
                 throw new IllegalArgumentException(String.format("Version %d is not valid. Valid versions for %s are 0 to %d",
                         versionId, this.getClass().getSimpleName(), ApiKeys.HEARTBEAT.latestVersion()));

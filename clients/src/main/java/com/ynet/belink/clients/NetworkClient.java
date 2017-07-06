@@ -19,20 +19,15 @@ package com.ynet.belink.clients;
 import com.ynet.belink.common.Cluster;
 import com.ynet.belink.common.Node;
 import com.ynet.belink.common.errors.UnsupportedVersionException;
+import com.ynet.belink.common.metrics.Sensor;
+import com.ynet.belink.common.network.ChannelState;
 import com.ynet.belink.common.network.NetworkReceive;
 import com.ynet.belink.common.network.Selectable;
 import com.ynet.belink.common.network.Send;
 import com.ynet.belink.common.protocol.ApiKeys;
 import com.ynet.belink.common.protocol.Errors;
 import com.ynet.belink.common.protocol.types.Struct;
-import com.ynet.belink.common.requests.AbstractRequest;
-import com.ynet.belink.common.requests.AbstractResponse;
-import com.ynet.belink.common.requests.ApiVersionsRequest;
-import com.ynet.belink.common.requests.ApiVersionsResponse;
-import com.ynet.belink.common.requests.MetadataRequest;
-import com.ynet.belink.common.requests.MetadataResponse;
-import com.ynet.belink.common.requests.RequestHeader;
-import com.ynet.belink.common.requests.ResponseHeader;
+import com.ynet.belink.common.requests.*;
 import com.ynet.belink.common.utils.Time;
 import com.ynet.belink.common.utils.Utils;
 import org.slf4j.Logger;
@@ -41,14 +36,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
-import java.util.Set;
+import java.util.*;
 
 /**
  * A network client for asynchronous request/response network i/o. This is an internal class used to implement the
@@ -100,23 +88,48 @@ public class NetworkClient implements BelinkClient {
 
     private final ApiVersions apiVersions;
 
-    private final Set<String> nodesNeedingApiVersionsFetch = new HashSet<>();
+    private final Map<String, ApiVersionsRequest.Builder> nodesNeedingApiVersionsFetch = new HashMap<>();
 
     private final List<ClientResponse> abortedSends = new LinkedList<>();
+
+    private final Sensor throttleTimeSensor;
 
     public NetworkClient(Selectable selector,
                          Metadata metadata,
                          String clientId,
                          int maxInFlightRequestsPerConnection,
                          long reconnectBackoffMs,
+                         long reconnectBackoffMax,
                          int socketSendBuffer,
                          int socketReceiveBuffer,
                          int requestTimeoutMs,
                          Time time,
                          boolean discoverBrokerVersions,
                          ApiVersions apiVersions) {
-        this(null, metadata, selector, clientId, maxInFlightRequestsPerConnection, reconnectBackoffMs,
-                socketSendBuffer, socketReceiveBuffer, requestTimeoutMs, time, discoverBrokerVersions, apiVersions);
+        this(null, metadata, selector, clientId, maxInFlightRequestsPerConnection,
+             reconnectBackoffMs, reconnectBackoffMax,
+             socketSendBuffer, socketReceiveBuffer, requestTimeoutMs, time,
+             discoverBrokerVersions, apiVersions, null);
+    }
+
+    public NetworkClient(Selectable selector,
+                         Metadata metadata,
+                         String clientId,
+                         int maxInFlightRequestsPerConnection,
+                         long reconnectBackoffMs,
+                         long reconnectBackoffMax,
+                         int socketSendBuffer,
+                         int socketReceiveBuffer,
+                         int requestTimeoutMs,
+                         Time time,
+                         boolean discoverBrokerVersions,
+                         ApiVersions apiVersions,
+                         Sensor throttleTimeSensor) {
+
+        this(null, metadata, selector, clientId, maxInFlightRequestsPerConnection,
+             reconnectBackoffMs, reconnectBackoffMax,
+             socketSendBuffer, socketReceiveBuffer, requestTimeoutMs, time,
+             discoverBrokerVersions, apiVersions, throttleTimeSensor);
     }
 
     public NetworkClient(Selectable selector,
@@ -124,14 +137,17 @@ public class NetworkClient implements BelinkClient {
                          String clientId,
                          int maxInFlightRequestsPerConnection,
                          long reconnectBackoffMs,
+                         long reconnectBackoffMax,
                          int socketSendBuffer,
                          int socketReceiveBuffer,
                          int requestTimeoutMs,
                          Time time,
                          boolean discoverBrokerVersions,
                          ApiVersions apiVersions) {
-        this(metadataUpdater, null, selector, clientId, maxInFlightRequestsPerConnection, reconnectBackoffMs,
-                socketSendBuffer, socketReceiveBuffer, requestTimeoutMs, time, discoverBrokerVersions, apiVersions);
+        this(metadataUpdater, null, selector, clientId, maxInFlightRequestsPerConnection,
+             reconnectBackoffMs, reconnectBackoffMax,
+             socketSendBuffer, socketReceiveBuffer, requestTimeoutMs, time,
+             discoverBrokerVersions, apiVersions, null);
     }
 
     private NetworkClient(MetadataUpdater metadataUpdater,
@@ -140,12 +156,14 @@ public class NetworkClient implements BelinkClient {
                           String clientId,
                           int maxInFlightRequestsPerConnection,
                           long reconnectBackoffMs,
+                          long reconnectBackoffMax,
                           int socketSendBuffer,
                           int socketReceiveBuffer,
                           int requestTimeoutMs,
                           Time time,
                           boolean discoverBrokerVersions,
-                          ApiVersions apiVersions) {
+                          ApiVersions apiVersions,
+                          Sensor throttleTimeSensor) {
         /* It would be better if we could pass `DefaultMetadataUpdater` from the public constructor, but it's not
          * possible because `DefaultMetadataUpdater` is an inner class and it can only be instantiated after the
          * super constructor is invoked.
@@ -160,7 +178,7 @@ public class NetworkClient implements BelinkClient {
         this.selector = selector;
         this.clientId = clientId;
         this.inFlightRequests = new InFlightRequests(maxInFlightRequestsPerConnection);
-        this.connectionStates = new ClusterConnectionStates(reconnectBackoffMs);
+        this.connectionStates = new ClusterConnectionStates(reconnectBackoffMs, reconnectBackoffMax);
         this.socketSendBuffer = socketSendBuffer;
         this.socketReceiveBuffer = socketReceiveBuffer;
         this.correlation = 0;
@@ -170,6 +188,7 @@ public class NetworkClient implements BelinkClient {
         this.time = time;
         this.discoverBrokerVersions = discoverBrokerVersions;
         this.apiVersions = apiVersions;
+        this.throttleTimeSensor = throttleTimeSensor;
     }
 
     /**
@@ -195,7 +214,39 @@ public class NetworkClient implements BelinkClient {
     }
 
     /**
+     * Disconnects the connection to a particular node, if there is one.
+     * Any pending ClientRequests for this connection will receive disconnections.
+     *
+     * @param nodeId The id of the node
+     */
+    @Override
+    public void disconnect(String nodeId) {
+        selector.close(nodeId);
+        List<ApiKeys> requestTypes = new ArrayList<>();
+        long now = time.milliseconds();
+        for (InFlightRequest request : inFlightRequests.clearAll(nodeId)) {
+            if (request.isInternalRequest) {
+                if (request.header.apiKey() == ApiKeys.METADATA.id) {
+                    metadataUpdater.handleDisconnection(request.destination);
+                }
+            } else {
+                requestTypes.add(ApiKeys.forId(request.header.apiKey()));
+                abortedSends.add(new ClientResponse(request.header,
+                        request.callback, request.destination, request.createdTimeMs, now,
+                        true, null, null));
+            }
+        }
+        connectionStates.disconnected(nodeId, now);
+        if (log.isDebugEnabled()) {
+            log.debug("Manually disconnected from {}. Removed requests: {}.", nodeId,
+                Utils.join(requestTypes, ", "));
+        }
+    }
+
+    /**
      * Closes the connection to a particular node (if there is one).
+     * All requests on the connection will be cleared.  ClientRequest callbacks will not be invoked
+     * for the cleared requests, nor will they be returned from poll().
      *
      * @param nodeId The id of the node
      */
@@ -224,7 +275,7 @@ public class NetworkClient implements BelinkClient {
 
     /**
      * Check if the connection of the node has failed, based on the connection state. Such connection failure are
-     * usually transient and can be resumed in the next {@link #ready( com.ynet.belink.common.Node, long)} }
+     * usually transient and can be resumed in the next {@link #ready(com.ynet.belink.common.Node, long)} }
      * call, but there are cases where transient failures needs to be caught and re-acted upon.
      *
      * @param node the node to check
@@ -296,8 +347,8 @@ public class NetworkClient implements BelinkClient {
             if (versionInfo == null) {
                 version = builder.desiredOrLatestVersion();
                 if (discoverBrokerVersions && log.isTraceEnabled())
-                    log.trace("No version information found when sending message of type {} to node {}. " +
-                            "Assuming version {}.", clientRequest.apiKey(), nodeId, version);
+                    log.trace("No version information found when sending {} with correlation id {} to node {}. " +
+                            "Assuming version {}.", clientRequest.apiKey(), clientRequest.correlationId(), nodeId, version);
             } else {
                 version = versionInfo.usableVersion(clientRequest.apiKey(), builder.desiredVersion());
             }
@@ -307,8 +358,8 @@ public class NetworkClient implements BelinkClient {
         } catch (UnsupportedVersionException e) {
             // If the version is not supported, skip sending the request over the wire.
             // Instead, simply add it to the local queue of aborted requests.
-            log.debug("Version mismatch when attempting to send {} to {}",
-                    clientRequest.toString(), clientRequest.destination(), e);
+            log.debug("Version mismatch when attempting to send {} with correlation id {} to {}", builder,
+                    clientRequest.correlationId(), clientRequest.destination(), e);
             ClientResponse clientResponse = new ClientResponse(clientRequest.makeHeader(builder.desiredOrLatestVersion()),
                     clientRequest.callback(), clientRequest.destination(), now, now,
                     false, e, null);
@@ -322,10 +373,11 @@ public class NetworkClient implements BelinkClient {
         if (log.isDebugEnabled()) {
             int latestClientVersion = clientRequest.apiKey().latestVersion();
             if (header.apiVersion() == latestClientVersion) {
-                log.trace("Sending {} {} to node {}.", clientRequest.apiKey(), request, nodeId);
+                log.trace("Sending {} {} with correlation id {} to node {}", clientRequest.apiKey(), request,
+                        clientRequest.correlationId(), nodeId);
             } else {
-                log.debug("Using older server API v{} to send {} {} to node {}.",
-                        header.apiVersion(), clientRequest.apiKey(), request, nodeId);
+                log.debug("Using older server API v{} to send {} {} with correlation id {} to node {}",
+                        header.apiVersion(), clientRequest.apiKey(), request, clientRequest.correlationId(), nodeId);
             }
         }
         Send send = request.toSend(nodeId, header);
@@ -354,6 +406,15 @@ public class NetworkClient implements BelinkClient {
      */
     @Override
     public List<ClientResponse> poll(long timeout, long now) {
+        if (!abortedSends.isEmpty()) {
+            // If there are aborted sends because of unsupported version exceptions or disconnects,
+            // handle them immediately without waiting for Selector#poll.
+            List<ClientResponse> responses = new ArrayList<>();
+            handleAbortedSends(responses);
+            completeResponses(responses);
+            return responses;
+        }
+
         long metadataTimeout = metadataUpdater.maybeUpdate(now);
         try {
             this.selector.poll(Utils.min(timeout, metadataTimeout, requestTimeoutMs));
@@ -364,15 +425,18 @@ public class NetworkClient implements BelinkClient {
         // process completed actions
         long updatedNow = this.time.milliseconds();
         List<ClientResponse> responses = new ArrayList<>();
-        handleAbortedSends(responses);
         handleCompletedSends(responses, updatedNow);
         handleCompletedReceives(responses, updatedNow);
         handleDisconnections(responses, updatedNow);
         handleConnections();
         handleInitiateApiVersionRequests(updatedNow);
         handleTimedOutRequests(responses, updatedNow);
+        completeResponses(responses);
 
-        // invoke callbacks
+        return responses;
+    }
+
+    private void completeResponses(List<ClientResponse> responses) {
         for (ClientResponse response : responses) {
             try {
                 response.onComplete();
@@ -380,8 +444,6 @@ public class NetworkClient implements BelinkClient {
                 log.error("Uncaught error in request completion:", e);
             }
         }
-
-        return responses;
     }
 
     /**
@@ -407,7 +469,12 @@ public class NetworkClient implements BelinkClient {
 
     @Override
     public boolean hasInFlightRequests(String node) {
-        return this.inFlightRequests.isEmpty(node);
+        return !this.inFlightRequests.isEmpty(node);
+    }
+
+    @Override
+    public boolean hasReadyNodes() {
+        return connectionStates.hasReadyNodes();
     }
 
     /**
@@ -445,7 +512,7 @@ public class NetworkClient implements BelinkClient {
             int idx = (offset + i) % nodes.size();
             Node node = nodes.get(idx);
             int currInflight = this.inFlightRequests.count(node.idString());
-            if (currInflight == 0 && this.connectionStates.isReady(node.idString())) {
+            if (currInflight == 0 && isReady(node, now)) {
                 // if we find an established connection with no in-flight requests we can stop right away
                 log.trace("Found least loaded node {} connected with no in-flight requests", node);
                 return node;
@@ -468,12 +535,25 @@ public class NetworkClient implements BelinkClient {
     }
 
     public static AbstractResponse parseResponse(ByteBuffer responseBuffer, RequestHeader requestHeader) {
+        return createResponse(parseStructMaybeUpdateThrottleTimeMetrics(responseBuffer, requestHeader,
+                null, 0), requestHeader);
+    }
+
+    private static Struct parseStructMaybeUpdateThrottleTimeMetrics(ByteBuffer responseBuffer, RequestHeader requestHeader,
+                                                                    Sensor throttleTimeSensor, long now) {
         ResponseHeader responseHeader = ResponseHeader.parse(responseBuffer);
-        // Always expect the response version id to be the same as the request version id
         ApiKeys apiKey = ApiKeys.forId(requestHeader.apiKey());
-        Struct responseBody = apiKey.responseSchema(requestHeader.apiVersion()).read(responseBuffer);
+        // Always expect the response version id to be the same as the request version id
+        Struct responseBody = apiKey.parseResponse(requestHeader.apiVersion(), responseBuffer);
         correlate(requestHeader, responseHeader);
-        return AbstractResponse.getResponse(apiKey, responseBody);
+        if (throttleTimeSensor != null && responseBody.hasField(AbstractResponse.THROTTLE_TIME_KEY_NAME))
+            throttleTimeSensor.record(responseBody.getInt(AbstractResponse.THROTTLE_TIME_KEY_NAME), now);
+        return responseBody;
+    }
+
+    private static AbstractResponse createResponse(Struct responseStruct, RequestHeader requestHeader) {
+        ApiKeys apiKey = ApiKeys.forId(requestHeader.apiKey());
+        return AbstractResponse.getResponse(apiKey, responseStruct);
     }
 
     /**
@@ -483,12 +563,24 @@ public class NetworkClient implements BelinkClient {
      * @param nodeId Id of the node to be disconnected
      * @param now The current time
      */
-    private void processDisconnection(List<ClientResponse> responses, String nodeId, long now) {
+    private void processDisconnection(List<ClientResponse> responses, String nodeId, long now, ChannelState disconnectState) {
         connectionStates.disconnected(nodeId, now);
         apiVersions.remove(nodeId);
         nodesNeedingApiVersionsFetch.remove(nodeId);
+        switch (disconnectState) {
+            case AUTHENTICATE:
+                log.warn("Connection to node {} terminated during authentication. This may indicate " +
+                        "that authentication failed due to invalid credentials.", nodeId);
+                break;
+            case NOT_CONNECTED:
+                log.warn("Connection to node {} could not be established. Broker may not be available.", nodeId);
+                break;
+            default:
+                break; // Disconnections in other states are logged at debug level in Selector
+        }
         for (InFlightRequest request : this.inFlightRequests.clearAll(nodeId)) {
-            log.trace("Cancelled request {} due to node {} being disconnected", request.request, nodeId);
+            log.trace("Cancelled request {} with correlation id {} due to node {} being disconnected", request.request,
+                    request.header.correlationId(), nodeId);
             if (request.isInternalRequest && request.header.apiKey() == ApiKeys.METADATA.id)
                 metadataUpdater.handleDisconnection(request.destination);
             else
@@ -509,7 +601,7 @@ public class NetworkClient implements BelinkClient {
             // close connection to the node
             this.selector.close(nodeId);
             log.debug("Disconnecting from node {} due to request timeout.", nodeId);
-            processDisconnection(responses, nodeId, now);
+            processDisconnection(responses, nodeId, now, ChannelState.LOCAL_CLOSE);
         }
 
         // we disconnected, so we should probably refresh our metadata
@@ -549,8 +641,13 @@ public class NetworkClient implements BelinkClient {
         for (NetworkReceive receive : this.selector.completedReceives()) {
             String source = receive.source();
             InFlightRequest req = inFlightRequests.completeNext(source);
-            AbstractResponse body = parseResponse(receive.payload(), req.header);
-            log.trace("Completed receive from node {}, for key {}, received {}", req.destination, req.header.apiKey(), body);
+            Struct responseStruct = parseStructMaybeUpdateThrottleTimeMetrics(receive.payload(), req.header,
+                throttleTimeSensor, now);
+            if (log.isTraceEnabled()) {
+                log.trace("Completed receive from node {} for {} with correlation id {}, received {}", req.destination,
+                    ApiKeys.forId(req.header.apiKey()), req.header.correlationId(), responseStruct);
+            }
+            AbstractResponse body = createResponse(responseStruct, req.header);
             if (req.isInternalRequest && body instanceof MetadataResponse)
                 metadataUpdater.handleCompletedMetadataResponse(req.header, now, (MetadataResponse) body);
             else if (req.isInternalRequest && body instanceof ApiVersionsResponse)
@@ -564,10 +661,14 @@ public class NetworkClient implements BelinkClient {
                                            InFlightRequest req, long now, ApiVersionsResponse apiVersionsResponse) {
         final String node = req.destination;
         if (apiVersionsResponse.error() != Errors.NONE) {
-            log.warn("Node {} got error {} when making an ApiVersionsRequest.  Disconnecting.",
-                    node, apiVersionsResponse.error());
-            this.selector.close(node);
-            processDisconnection(responses, node, now);
+            if (req.request.version() == 0 || apiVersionsResponse.error() != Errors.UNSUPPORTED_VERSION) {
+                log.warn("Received error {} from node {} when making an ApiVersionsRequest with correlation id {}. Disconnecting.",
+                        apiVersionsResponse.error(), node, req.header.correlationId());
+                this.selector.close(node);
+                processDisconnection(responses, node, now, ChannelState.LOCAL_CLOSE);
+            } else {
+                nodesNeedingApiVersionsFetch.put(node, new ApiVersionsRequest.Builder((short) 0));
+            }
             return;
         }
         NodeApiVersions nodeVersionInfo = new NodeApiVersions(apiVersionsResponse.apiVersions());
@@ -585,9 +686,10 @@ public class NetworkClient implements BelinkClient {
      * @param now The current time
      */
     private void handleDisconnections(List<ClientResponse> responses, long now) {
-        for (String node : this.selector.disconnected()) {
+        for (Map.Entry<String, ChannelState> entry : this.selector.disconnected().entrySet()) {
+            String node = entry.getKey();
             log.debug("Node {} disconnected.", node);
-            processDisconnection(responses, node, now);
+            processDisconnection(responses, node, now, entry.getValue());
         }
         // we got a disconnect so we should probably refresh our metadata and see if that broker is dead
         if (this.selector.disconnected().size() > 0)
@@ -605,23 +707,24 @@ public class NetworkClient implements BelinkClient {
             // connection.
             if (discoverBrokerVersions) {
                 this.connectionStates.checkingApiVersions(node);
-                nodesNeedingApiVersionsFetch.add(node);
-                log.debug("Completed connection to node {}.  Fetching API versions.", node);
+                nodesNeedingApiVersionsFetch.put(node, new ApiVersionsRequest.Builder());
+                log.debug("Completed connection to node {}. Fetching API versions.", node);
             } else {
                 this.connectionStates.ready(node);
-                log.debug("Completed connection to node {}.  Ready.", node);
+                log.debug("Completed connection to node {}. Ready.", node);
             }
         }
     }
 
     private void handleInitiateApiVersionRequests(long now) {
-        Iterator<String> iter = nodesNeedingApiVersionsFetch.iterator();
+        Iterator<Map.Entry<String, ApiVersionsRequest.Builder>> iter = nodesNeedingApiVersionsFetch.entrySet().iterator();
         while (iter.hasNext()) {
-            String node = iter.next();
+            Map.Entry<String, ApiVersionsRequest.Builder> entry = iter.next();
+            String node = entry.getKey();
             if (selector.isChannelReady(node) && inFlightRequests.canSendMore(node)) {
                 log.debug("Initiating API versions fetch from node {}.", node);
-                ApiVersionsRequest.Builder apiVersionRequest = new ApiVersionsRequest.Builder();
-                ClientRequest clientRequest = newClientRequest(node, apiVersionRequest, now, true);
+                ApiVersionsRequest.Builder apiVersionRequestBuilder = entry.getValue();
+                ClientRequest clientRequest = newClientRequest(node, apiVersionRequestBuilder, now, true);
                 doSend(clientRequest, true, now);
                 iter.remove();
             }
@@ -643,18 +746,18 @@ public class NetworkClient implements BelinkClient {
     private void initiateConnect(Node node, long now) {
         String nodeConnectionId = node.idString();
         try {
-            log.debug("Initiating connection to node {} at {}:{}.", node.id(), node.host(), node.port());
+            log.debug("Initiating connection to node {}", node);
             this.connectionStates.connecting(nodeConnectionId, now);
             selector.connect(nodeConnectionId,
-                    new InetSocketAddress(node.host(), node.port()),
-                    this.socketSendBuffer,
-                    this.socketReceiveBuffer);
+                             new InetSocketAddress(node.host(), node.port()),
+                             this.socketSendBuffer,
+                             this.socketReceiveBuffer);
         } catch (IOException e) {
             /* attempt failed, we'll try again after the backoff */
             connectionStates.disconnected(nodeConnectionId, now);
             /* maybe the problem is our metadata, update it */
             metadataUpdater.requestUpdate();
-            log.debug("Error connecting to node {} at {}:{}:", node.id(), node.host(), node.port(), e);
+            log.debug("Error connecting to node {}", node, e);
         }
     }
 
@@ -706,11 +809,15 @@ public class NetworkClient implements BelinkClient {
         @Override
         public void handleDisconnection(String destination) {
             Cluster cluster = metadata.fetch();
+            // 'processDisconnection' generates warnings for misconfigured bootstrap server configuration
+            // resulting in 'Connection Refused' and misconfigured security resulting in authentication failures.
+            // The warning below handles the case where connection to a broker was established, but was disconnected
+            // before metadata could be obtained.
             if (cluster.isBootstrapConfigured()) {
                 int nodeId = Integer.parseInt(destination);
                 Node node = cluster.nodeById(nodeId);
                 if (node != null)
-                    log.warn("Bootstrap broker {}:{} disconnected", node.host(), node.port());
+                    log.warn("Bootstrap broker {} disconnected", node);
             }
 
             metadataFetchInProgress = false;
@@ -764,10 +871,11 @@ public class NetworkClient implements BelinkClient {
                 if (metadata.needMetadataForAllTopics())
                     metadataRequest = MetadataRequest.Builder.allTopics();
                 else
-                    metadataRequest = new MetadataRequest.Builder(new ArrayList<>(metadata.topics()));
+                    metadataRequest = new MetadataRequest.Builder(new ArrayList<>(metadata.topics()),
+                            metadata.allowAutoTopicCreation());
 
 
-                log.debug("Sending metadata request {} to node {}", metadataRequest, node.id());
+                log.debug("Sending metadata request {} to node {}", metadataRequest, node);
                 sendInternalMetadataRequest(metadataRequest, nodeConnectionId, now);
                 return requestTimeoutMs;
             }
@@ -783,7 +891,7 @@ public class NetworkClient implements BelinkClient {
 
             if (connectionStates.canConnect(nodeConnectionId, now)) {
                 // we don't have a connection to this node right now, make one
-                log.debug("Initialize connection to node {} for sending metadata request", node.id());
+                log.debug("Initialize connection to node {} for sending metadata request", node);
                 initiateConnect(node, now);
                 return reconnectBackoffMs;
             }

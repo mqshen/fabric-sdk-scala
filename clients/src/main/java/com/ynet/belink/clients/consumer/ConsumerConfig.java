@@ -16,18 +16,19 @@
  */
 package com.ynet.belink.clients.consumer;
 
-import  com.ynet.belink.clients.CommonClientConfigs;
-import  com.ynet.belink.common.config.AbstractConfig;
-import  com.ynet.belink.common.config.ConfigDef;
-import  com.ynet.belink.common.config.ConfigDef.Importance;
-import  com.ynet.belink.common.config.ConfigDef.Type;
-import  com.ynet.belink.common.metrics.Sensor;
-import  com.ynet.belink.common.serialization.Deserializer;
+import com.ynet.belink.clients.CommonClientConfigs;
+import com.ynet.belink.common.config.AbstractConfig;
+import com.ynet.belink.common.config.ConfigDef;
+import com.ynet.belink.common.config.ConfigDef.Importance;
+import com.ynet.belink.common.config.ConfigDef.Type;
+import com.ynet.belink.common.metrics.Sensor;
+import com.ynet.belink.common.requests.IsolationLevel;
+import com.ynet.belink.common.serialization.Deserializer;
 
 import java.util.*;
 
-import static  com.ynet.belink.common.config.ConfigDef.Range.atLeast;
-import static  com.ynet.belink.common.config.ConfigDef.ValidString.in;
+import static com.ynet.belink.common.config.ConfigDef.Range.atLeast;
+import static com.ynet.belink.common.config.ConfigDef.ValidString.in;
 
 /**
  * The consumer configuration keys
@@ -118,9 +119,9 @@ public class ConsumerConfig extends AbstractConfig {
      */
     public static final String FETCH_MAX_BYTES_CONFIG = "fetch.max.bytes";
     private static final String FETCH_MAX_BYTES_DOC = "The maximum amount of data the server should return for a fetch request. " +
-            "This is not an absolute maximum, if the first message in the first non-empty partition of the fetch is larger than " +
-            "this value, the message will still be returned to ensure that the consumer can make progress. " +
-            "The maximum message size accepted by the broker is defined via <code>message.max.bytes</code> (broker config) or " +
+            "Records are fetched in batches by the consumer, and if the first record batch in the first non-empty partition of the fetch is larger than " +
+            "this value, the record batch will still be returned to ensure that the consumer can make progress. As such, this is not a absolute maximum. " +
+            "The maximum record batch size accepted by the broker is defined via <code>message.max.bytes</code> (broker config) or " +
             "<code>max.message.bytes</code> (topic config). Note that the consumer performs multiple fetches in parallel.";
     public static final int DEFAULT_FETCH_MAX_BYTES = 50 * 1024 * 1024;
 
@@ -138,8 +139,9 @@ public class ConsumerConfig extends AbstractConfig {
      */
     public static final String MAX_PARTITION_FETCH_BYTES_CONFIG = "max.partition.fetch.bytes";
     private static final String MAX_PARTITION_FETCH_BYTES_DOC = "The maximum amount of data per-partition the server " +
-            "will return. If the first message in the first non-empty partition of the fetch is larger than this limit, the " +
-            "message will still be returned to ensure that the consumer can make progress. The maximum message size " +
+            "will return. Records are fetched in batches by the consumer. If the first record batch in the first non-empty " +
+            "partition of the fetch is larger than this limit, the " +
+            "batch will still be returned to ensure that the consumer can make progress. The maximum record batch size " +
             "accepted by the broker is defined via <code>message.max.bytes</code> (broker config) or " +
             "<code>max.message.bytes</code> (topic config). See " + FETCH_MAX_BYTES_CONFIG + " for limiting the consumer request size.";
     public static final int DEFAULT_MAX_PARTITION_FETCH_BYTES = 1 * 1024 * 1024;
@@ -159,6 +161,11 @@ public class ConsumerConfig extends AbstractConfig {
      * <code>reconnect.backoff.ms</code>
      */
     public static final String RECONNECT_BACKOFF_MS_CONFIG = CommonClientConfigs.RECONNECT_BACKOFF_MS_CONFIG;
+
+    /**
+     * <code>reconnect.backoff.max.ms</code>
+     */
+    public static final String RECONNECT_BACKOFF_MAX_MS_CONFIG = CommonClientConfigs.RECONNECT_BACKOFF_MAX_MS_CONFIG;
 
     /**
      * <code>retry.backoff.ms</code>
@@ -230,6 +237,18 @@ public class ConsumerConfig extends AbstractConfig {
      */
     static final String LEAVE_GROUP_ON_CLOSE_CONFIG = "internal.leave.group.on.close";
 
+    /** <code>isolation.level</code> */
+    public static final String ISOLATION_LEVEL_CONFIG = "isolation.level";
+    public static final String ISOLATION_LEVEL_DOC = "<p>Controls how to read messages written transactionally. If set to <code>read_committed</code>, consumer.poll() will only return" +
+            " transactional messages which have been committed. If set to <code>read_uncommitted</code>' (the default), consumer.poll() will return all messages, even transactional messages" +
+            " which have been aborted. Non-transactional messages will be returned unconditionally in either mode.</p> <p>Messages will always be returned in offset order. Hence, in " +
+            " <code>read_committed</code> mode, consumer.poll() will only return messages up to the last stable offset (LSO), which is the one less than the offset of the first open transaction." +
+            " In particular any messages appearing after messages belonging to ongoing transactions will be withheld until the relevant transaction has been completed. As a result, <code>read_committed</code>" +
+            " consumers will not be able to read up to the high watermark when there are in flight transactions.</p><p> Further, when in <code>read_committed</mode> the seekToEnd method will" +
+            " return the LSO";
+
+    public static final String DEFAULT_ISOLATION_LEVEL = IsolationLevel.READ_UNCOMMITTED.toString().toLowerCase(Locale.ROOT);
+    
     static {
         CONFIG = new ConfigDef().define(BOOTSTRAP_SERVERS_CONFIG,
                                         Type.LIST,
@@ -315,6 +334,12 @@ public class ConsumerConfig extends AbstractConfig {
                                         atLeast(0L),
                                         Importance.LOW,
                                         CommonClientConfigs.RECONNECT_BACKOFF_MS_DOC)
+                                .define(RECONNECT_BACKOFF_MAX_MS_CONFIG,
+                                        Type.LONG,
+                                        1000L,
+                                        atLeast(0L),
+                                        Importance.LOW,
+                                        CommonClientConfigs.RECONNECT_BACKOFF_MAX_MS_DOC)
                                 .define(RETRY_BACKOFF_MS_CONFIG,
                                         Type.LONG,
                                         100L,
@@ -401,6 +426,12 @@ public class ConsumerConfig extends AbstractConfig {
                                                 Type.BOOLEAN,
                                                 true,
                                                 Importance.LOW)
+                                .define(ISOLATION_LEVEL_CONFIG,
+                                        Type.STRING,
+                                        DEFAULT_ISOLATION_LEVEL,
+                                        in(IsolationLevel.READ_COMMITTED.toString().toLowerCase(Locale.ROOT), IsolationLevel.READ_UNCOMMITTED.toString().toLowerCase(Locale.ROOT)),
+                                        Importance.MEDIUM,
+                                        ISOLATION_LEVEL_DOC)
                                 // security support
                                 .define(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG,
                                         Type.STRING,
@@ -410,6 +441,11 @@ public class ConsumerConfig extends AbstractConfig {
                                 .withClientSslSupport()
                                 .withClientSaslSupport();
 
+    }
+
+    @Override
+    protected Map<String, Object> postProcessParsedConfig(final Map<String, Object> parsedValues) {
+        return CommonClientConfigs.postProcessReconnectBackoffConfigs(this, parsedValues);
     }
 
     public static Map<String, Object> addDeserializerToConfig(Map<String, Object> configs,

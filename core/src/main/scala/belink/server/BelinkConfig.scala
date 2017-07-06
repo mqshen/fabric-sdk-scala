@@ -96,6 +96,13 @@ object Defaults {
   val SaslKerberosTicketRenewJitter = SaslConfigs.DEFAULT_KERBEROS_TICKET_RENEW_JITTER
   val SaslKerberosMinTimeBeforeRelogin = SaslConfigs.DEFAULT_KERBEROS_MIN_TIME_BEFORE_RELOGIN
   val SaslKerberosPrincipalToLocalRules = SaslConfigs.DEFAULT_SASL_KERBEROS_PRINCIPAL_TO_LOCAL_RULES
+  /** ********* Quota Configuration ***********/
+  val ProducerQuotaBytesPerSecondDefault = ClientQuotaManagerConfig.QuotaBytesPerSecondDefault
+  val ConsumerQuotaBytesPerSecondDefault = ClientQuotaManagerConfig.QuotaBytesPerSecondDefault
+  val NumQuotaSamples: Int = ClientQuotaManagerConfig.DefaultNumQuotaSamples
+  val QuotaWindowSizeSeconds: Int = ClientQuotaManagerConfig.DefaultQuotaWindowSizeSeconds
+  val NumReplicationQuotaSamples: Int = ReplicationQuotaManagerConfig.DefaultNumQuotaSamples
+  val ReplicationQuotaWindowSizeSeconds: Int = ReplicationQuotaManagerConfig.DefaultQuotaWindowSizeSeconds
 
   val AutoCreateTopicsEnable = true
 
@@ -143,6 +150,8 @@ object BelinkConfig {
 
   val AutoCreateTopicsEnableProp = "auto.create.topics.enable"
 
+
+  val InterBrokerProtocolVersionProp = "inter.broker.protocol.version"
   /** ********* Log Configuration ***********/
   val NumPartitionsProp = "num.partitions"
   val LogDirsProp = "log.dirs"
@@ -191,6 +200,14 @@ object BelinkConfig {
   val PortProp = "port"
   val HostNameProp = "host.name"
 
+
+  /** ********* Quota Configuration ***********/
+  val ProducerQuotaBytesPerSecondDefaultProp = "quota.producer.default"
+  val ConsumerQuotaBytesPerSecondDefaultProp = "quota.consumer.default"
+  val NumQuotaSamplesProp = "quota.window.num"
+  val NumReplicationQuotaSamplesProp = "replication.quota.window.num"
+  val QuotaWindowSizeSecondsProp = "quota.window.size.seconds"
+  val ReplicationQuotaWindowSizeSecondsProp = "replication.quota.window.size.seconds"
 
   /************* Authorizer Configuration ***********/
   val AuthorizerClassNameProp = "authorizer.class.name"
@@ -272,6 +289,10 @@ object BelinkConfig {
     "from the PID is deleted due to the topic's retention settings)."
   val LogRollTimeHoursDoc = "The maximum time before a new log segment is rolled out (in hours), secondary to " + LogRollTimeMillisProp + " property"
 
+  val InterBrokerProtocolVersionDoc = "Specify which version of the inter-broker protocol will be used.\n" +
+    " This is typically bumped after all brokers were upgraded to a new version.\n" +
+    " Example of some valid values are: 0.8.0, 0.8.1, 0.8.1.1, 0.8.2, 0.8.2.0, 0.8.2.1, 0.9.0.0, 0.9.0.1 Check ApiVersion for the full list."
+
   /** ********* Sasl Configuration ****************/
   val SaslMechanismInterBrokerProtocolDoc = "SASL mechanism used for inter-broker communication. Default is GSSAPI."
   val SaslEnabledMechanismsDoc = SaslConfigs.SASL_ENABLED_MECHANISMS_DOC
@@ -281,7 +302,15 @@ object BelinkConfig {
   val SaslKerberosTicketRenewJitterDoc = SaslConfigs.SASL_KERBEROS_TICKET_RENEW_JITTER_DOC
   val SaslKerberosMinTimeBeforeReloginDoc = SaslConfigs.SASL_KERBEROS_MIN_TIME_BEFORE_RELOGIN_DOC
   val SaslKerberosPrincipalToLocalRulesDoc = SaslConfigs.SASL_KERBEROS_PRINCIPAL_TO_LOCAL_RULES_DOC
-
+  /** ********* Quota Configuration ***********/
+  val ProducerQuotaBytesPerSecondDefaultDoc = "DEPRECATED: Used only when dynamic default quotas are not configured for <user>, <client-id> or <user, client-id> in Zookeeper. " +
+    "Any producer distinguished by clientId will get throttled if it produces more bytes than this value per-second"
+  val ConsumerQuotaBytesPerSecondDefaultDoc = "DEPRECATED: Used only when dynamic default quotas are not configured for <user, <client-id> or <user, client-id> in Zookeeper. " +
+    "Any consumer distinguished by clientId/consumer group will get throttled if it fetches more bytes than this value per-second"
+  val NumQuotaSamplesDoc = "The number of samples to retain in memory for client quotas"
+  val NumReplicationQuotaSamplesDoc = "The number of samples to retain in memory for replication quotas"
+  val QuotaWindowSizeSecondsDoc = "The time span of each sample for client quotas"
+  val ReplicationQuotaWindowSizeSecondsDoc = "The time span of each sample for replication quotas"
 
   private val configDef = {
     import ConfigDef.Importance._
@@ -339,6 +368,17 @@ object BelinkConfig {
 
       .define(LogRollTimeHoursProp, INT, Defaults.LogRollHours, atLeast(1), HIGH, LogRollTimeHoursDoc)
       .define(LogRollTimeJitterMillisProp, LONG, null, HIGH, LogRollTimeJitterMillisDoc)
+
+      .define(InterBrokerProtocolVersionProp, STRING, Defaults.InterBrokerProtocolVersion, MEDIUM, InterBrokerProtocolVersionDoc)
+
+      /** ********* Quota configuration ***********/
+      .define(ProducerQuotaBytesPerSecondDefaultProp, LONG, Defaults.ProducerQuotaBytesPerSecondDefault, atLeast(1), HIGH, ProducerQuotaBytesPerSecondDefaultDoc)
+      .define(ConsumerQuotaBytesPerSecondDefaultProp, LONG, Defaults.ConsumerQuotaBytesPerSecondDefault, atLeast(1), HIGH, ConsumerQuotaBytesPerSecondDefaultDoc)
+      .define(NumQuotaSamplesProp, INT, Defaults.NumQuotaSamples, atLeast(1), LOW, NumQuotaSamplesDoc)
+      .define(NumReplicationQuotaSamplesProp, INT, Defaults.NumReplicationQuotaSamples, atLeast(1), LOW, NumReplicationQuotaSamplesDoc)
+      .define(QuotaWindowSizeSecondsProp, INT, Defaults.QuotaWindowSizeSeconds, atLeast(1), LOW, QuotaWindowSizeSecondsDoc)
+      .define(ReplicationQuotaWindowSizeSecondsProp, INT, Defaults.ReplicationQuotaWindowSizeSeconds, atLeast(1), LOW, ReplicationQuotaWindowSizeSecondsDoc)
+
   }
 
   def fromProps(props: Properties): BelinkConfig =
@@ -409,6 +449,17 @@ class BelinkConfig(val props: java.util.Map[_, _], doLog: Boolean) extends Abstr
   val logSegmentBytes = getInt(BelinkConfig.LogSegmentBytesProp)
   val logRollTimeMillis: java.lang.Long = Option(getLong(BelinkConfig.LogRollTimeMillisProp)).getOrElse(60 * 60 * 1000L * getInt(BelinkConfig.LogRollTimeHoursProp))
 
+  val interBrokerProtocolVersionString = getString(BelinkConfig.InterBrokerProtocolVersionProp)
+  val interBrokerProtocolVersion = ApiVersion(interBrokerProtocolVersionString)
+
+  /** ********* Quota Configuration **************/
+  val producerQuotaBytesPerSecondDefault = getLong(BelinkConfig.ProducerQuotaBytesPerSecondDefaultProp)
+  val consumerQuotaBytesPerSecondDefault = getLong(BelinkConfig.ConsumerQuotaBytesPerSecondDefaultProp)
+  val numQuotaSamples = getInt(BelinkConfig.NumQuotaSamplesProp)
+  val quotaWindowSizeSeconds = getInt(BelinkConfig.QuotaWindowSizeSecondsProp)
+  val numReplicationQuotaSamples = getInt(BelinkConfig.NumReplicationQuotaSamplesProp)
+  val replicationQuotaWindowSizeSeconds = getInt(BelinkConfig.ReplicationQuotaWindowSizeSecondsProp)
+  
   /** ***** block chain configuration ****** **/
   val blockchainSyncInterval = getLong(BelinkConfig.BlockchainSyncIntervalProp)
 

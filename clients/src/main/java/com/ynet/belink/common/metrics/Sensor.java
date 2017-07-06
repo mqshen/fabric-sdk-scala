@@ -16,8 +16,8 @@
  */
 package com.ynet.belink.common.metrics;
 
-
 import com.ynet.belink.common.MetricName;
+import com.ynet.belink.common.metrics.CompoundStat.NamedMeasurable;
 import com.ynet.belink.common.utils.Time;
 import com.ynet.belink.common.utils.Utils;
 
@@ -163,16 +163,21 @@ public final class Sensor {
      *         bound
      */
     public void record(double value, long timeMs) {
+        record(value, timeMs, true);
+    }
+
+    public void record(double value, long timeMs, boolean checkQuotas) {
         if (shouldRecord()) {
             this.lastRecordTime = timeMs;
             synchronized (this) {
                 // increment all the stats
                 for (Stat stat : this.stats)
                     stat.record(config, value, timeMs);
-                checkQuotas(timeMs);
+                if (checkQuotas)
+                    checkQuotas(timeMs);
             }
             for (Sensor parent : parents)
-                parent.record(value, timeMs);
+                parent.record(value, timeMs, checkQuotas);
         }
     }
 
@@ -214,7 +219,7 @@ public final class Sensor {
      */
     public synchronized void add(CompoundStat stat, MetricConfig config) {
         this.stats.add(Utils.notNull(stat));
-        for (CompoundStat.NamedMeasurable m : stat.stats()) {
+        for (NamedMeasurable m : stat.stats()) {
             BelinkMetric metric = new BelinkMetric(this, m.name(), m.stat(), config == null ? this.config : config, time);
             this.registry.registerMetric(metric);
             this.metrics.add(metric);

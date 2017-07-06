@@ -730,6 +730,30 @@ public class Utils {
     }
 
     /**
+     * Read data from the input stream to the given byte buffer until there are no bytes remaining in the buffer or the
+     * end of the stream has been reached.
+     *
+     * @param inputStream Input stream to read from
+     * @param destinationBuffer The buffer into which bytes are to be transferred (it must be backed by an array)
+     *
+     * @throws IOException If an I/O error occurs
+     */
+    public static final void readFully(InputStream inputStream, ByteBuffer destinationBuffer) throws IOException {
+        if (!destinationBuffer.hasArray())
+            throw new IllegalArgumentException("destinationBuffer must be backed by an array");
+        int initialOffset = destinationBuffer.arrayOffset() + destinationBuffer.position();
+        byte[] array = destinationBuffer.array();
+        int length = destinationBuffer.remaining();
+        int totalBytesRead = 0;
+        do {
+            int bytesRead = inputStream.read(array, initialOffset + totalBytesRead, length - totalBytesRead);
+            if (bytesRead == -1)
+                break;
+            totalBytesRead += bytesRead;
+        } while (length > totalBytesRead);
+        destinationBuffer.position(destinationBuffer.position() + totalBytesRead);
+    }
+    /**
      * Write the contents of a buffer to an output stream. The bytes are copied from the current position
      * in the buffer.
      * @param out The output to write to
@@ -754,4 +778,23 @@ public class Utils {
         return res;
     }
 
+    public static void writeFully(FileChannel channel, ByteBuffer sourceBuffer) throws IOException {
+        while (sourceBuffer.hasRemaining())
+            channel.write(sourceBuffer);
+    }
+
+    /**
+     * Get the maximum of some long values.
+     * @param first Used to ensure at least one value
+     * @param rest The remaining values to compare
+     * @return The maximum of all passed values
+     */
+    public static long max(long first, long ... rest) {
+        long max = first;
+        for (long r : rest) {
+            if (r > max)
+                max = r;
+        }
+        return max;
+    }
 }

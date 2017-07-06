@@ -95,7 +95,14 @@ public abstract class AbstractRequest extends AbstractRequestResponse {
     /**
      * Get an error response for a request
      */
-    public abstract AbstractResponse getErrorResponse(Throwable e);
+    public AbstractResponse getErrorResponse(Throwable e) {
+        return getErrorResponse(AbstractResponse.DEFAULT_THROTTLE_TIME, e);
+    }
+
+    /**
+     * Get an error response for a request with specified throttle time in the response if applicable
+     */
+    public abstract AbstractResponse getErrorResponse(int throttleTimeMs, Throwable e);
 
     /**
      * Factory method for getting a request object based on ApiKey ID and a buffer
@@ -103,10 +110,46 @@ public abstract class AbstractRequest extends AbstractRequestResponse {
     public static RequestAndSize getRequest(int requestId, short version, ByteBuffer buffer) {
         ApiKeys apiKey = ApiKeys.forId(requestId);
         Struct struct = apiKey.parseRequest(version, buffer);
-        AbstractRequest request = null;
+        AbstractRequest request;
         switch (apiKey) {
             case PRODUCE:
                 request = new ProduceRequest(struct, version);
+                break;
+            case FETCH:
+                request = new FetchRequest(struct, version);
+                break;
+            case LIST_OFFSETS:
+                request = new ListOffsetRequest(struct, version);
+                break;
+            case METADATA:
+                request = new MetadataRequest(struct, version);
+                break;
+            case OFFSET_COMMIT:
+                request = new OffsetCommitRequest(struct, version);
+                break;
+            case OFFSET_FETCH:
+                request = new OffsetFetchRequest(struct, version);
+                break;
+            case FIND_COORDINATOR:
+                request = new FindCoordinatorRequest(struct, version);
+                break;
+            case JOIN_GROUP:
+                request = new JoinGroupRequest(struct, version);
+                break;
+            case HEARTBEAT:
+                request = new HeartbeatRequest(struct, version);
+                break;
+            case LEAVE_GROUP:
+                request = new LeaveGroupRequest(struct, version);
+                break;
+            case SYNC_GROUP:
+                request = new SyncGroupRequest(struct, version);
+                break;
+            case SASL_HANDSHAKE:
+                request = new SaslHandshakeRequest(struct, version);
+                break;
+            case API_VERSIONS:
+                request = new ApiVersionsRequest(struct, version);
                 break;
             default:
                 throw new AssertionError(String.format("ApiKey %s is not currently handled in `getRequest`, the " +

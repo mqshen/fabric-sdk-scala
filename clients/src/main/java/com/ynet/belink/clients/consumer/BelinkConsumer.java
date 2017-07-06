@@ -4,14 +4,8 @@ import  com.ynet.belink.clients.ApiVersions;
 import  com.ynet.belink.clients.ClientUtils;
 import  com.ynet.belink.clients.Metadata;
 import  com.ynet.belink.clients.NetworkClient;
-import  com.ynet.belink.clients.consumer.internals.ConsumerCoordinator;
-import  com.ynet.belink.clients.consumer.internals.ConsumerInterceptors;
-import  com.ynet.belink.clients.consumer.internals.ConsumerNetworkClient;
+import com.ynet.belink.clients.consumer.internals.*;
 import  com.ynet.belink.clients.consumer.internals.ConsumerNetworkClient.PollCondition;
-import  com.ynet.belink.clients.consumer.internals.Fetcher;
-import  com.ynet.belink.clients.consumer.internals.NoOpConsumerRebalanceListener;
-import  com.ynet.belink.clients.consumer.internals.PartitionAssignor;
-import  com.ynet.belink.clients.consumer.internals.SubscriptionState;
 import  com.ynet.belink.common.Cluster;
 import  com.ynet.belink.common.BelinkException;
 import  com.ynet.belink.common.Metric;
@@ -20,11 +14,14 @@ import  com.ynet.belink.common.PartitionInfo;
 import  com.ynet.belink.common.TopicPartition;
 import  com.ynet.belink.common.config.ConfigException;
 import  com.ynet.belink.common.errors.InterruptException;
+import com.ynet.belink.common.internals.ClusterResourceListeners;
 import  com.ynet.belink.common.metrics.MetricConfig;
 import  com.ynet.belink.common.metrics.Metrics;
 import  com.ynet.belink.common.metrics.MetricsReporter;
+import com.ynet.belink.common.metrics.Sensor;
 import  com.ynet.belink.common.network.ChannelBuilder;
 import  com.ynet.belink.common.network.Selector;
+import com.ynet.belink.common.requests.IsolationLevel;
 import  com.ynet.belink.common.requests.MetadataRequest;
 import  com.ynet.belink.common.serialization.Deserializer;
 import  com.ynet.belink.common.utils.AppInfoParser;
@@ -155,13 +152,14 @@ public class BelinkConsumer<K, V> implements Consumer<K, V> {
             if (clientId.length() <= 0)
                 clientId = "consumer-" + CONSUMER_CLIENT_ID_SEQUENCE.getAndIncrement();
             this.clientId = clientId;
-            Map<String, String> metricsTags = new LinkedHashMap<>();
-            metricsTags.put("client-id", clientId);
+            Map<String, String> metricsTags = Collections.singletonMap("client-id", clientId);
             MetricConfig metricConfig = new MetricConfig().samples(config.getInt(ConsumerConfig.METRICS_NUM_SAMPLES_CONFIG))
                     .timeWindow(config.getLong(ConsumerConfig.METRICS_SAMPLE_WINDOW_MS_CONFIG), TimeUnit.MILLISECONDS)
+                    .recordLevel(Sensor.RecordingLevel.forName(config.getString(ConsumerConfig.METRICS_RECORDING_LEVEL_CONFIG)))
                     .tags(metricsTags);
             List<MetricsReporter> reporters = config.getConfiguredInstances(ConsumerConfig.METRIC_REPORTER_CLASSES_CONFIG,
                     MetricsReporter.class);
+            //reporters.add(new JmxReporter(JMX_PREFIX));
             this.metrics = new Metrics(metricConfig, reporters, time);
             this.retryBackoffMs = config.getLong(ConsumerConfig.RETRY_BACKOFF_MS_CONFIG);
 
@@ -187,23 +185,33 @@ public class BelinkConsumer<K, V> implements Consumer<K, V> {
                 config.ignore(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG);
                 this.valueDeserializer = valueDeserializer;
             }
-            this.metadata = new Metadata(retryBackoffMs, config.getLong(ConsumerConfig.METADATA_MAX_AGE_CONFIG), false);
+            ClusterResourceListeners clusterResourceListeners = configureClusterResourceListeners(keyDeserializer, valueDeserializer, reporters, interceptorList);
+            this.metadata = new Metadata(retryBackoffMs, config.getLong(ConsumerConfig.METADATA_MAX_AGE_CONFIG),
+                    true, false, clusterResourceListeners);
             List<InetSocketAddress> addresses = ClientUtils.parseAndValidateAddresses(config.getList(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG));
             this.metadata.update(Cluster.bootstrap(addresses), Collections.<String>emptySet(), 0);
             String metricGrpPrefix = "consumer";
+            ConsumerMetrics metricsRegistry = new ConsumerMetrics(metricsTags.keySet(), "consumer");
             ChannelBuilder channelBuilder = ClientUtils.createChannelBuilder(config);
+
+            IsolationLevel isolationLevel = IsolationLevel.valueOf(
+                    config.getString(ConsumerConfig.ISOLATION_LEVEL_CONFIG).toUpperCase(Locale.ROOT));
+            Sensor throttleTimeSensor = Fetcher.throttleTimeSensor(metrics, metricsRegistry.fetcherMetrics);
+
             NetworkClient netClient = new NetworkClient(
                     new Selector(config.getLong(ConsumerConfig.CONNECTIONS_MAX_IDLE_MS_CONFIG), metrics, time, metricGrpPrefix, channelBuilder),
                     this.metadata,
                     clientId,
                     100, // a fixed large enough value will suffice for max in-flight requests
                     config.getLong(ConsumerConfig.RECONNECT_BACKOFF_MS_CONFIG),
+                    config.getLong(ConsumerConfig.RECONNECT_BACKOFF_MAX_MS_CONFIG),
                     config.getInt(ConsumerConfig.SEND_BUFFER_CONFIG),
                     config.getInt(ConsumerConfig.RECEIVE_BUFFER_CONFIG),
                     config.getInt(ConsumerConfig.REQUEST_TIMEOUT_MS_CONFIG),
                     time,
                     true,
-                    new ApiVersions());
+                    new ApiVersions(),
+                    throttleTimeSensor);
             this.client = new ConsumerNetworkClient(netClient, metadata, time, retryBackoffMs,
                     config.getInt(ConsumerConfig.REQUEST_TIMEOUT_MS_CONFIG));
             OffsetResetStrategy offsetResetStrategy = OffsetResetStrategy.valueOf(config.getString(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG).toUpperCase(Locale.ROOT));
@@ -240,11 +248,13 @@ public class BelinkConsumer<K, V> implements Consumer<K, V> {
                     this.metadata,
                     this.subscriptions,
                     metrics,
-                    metricGrpPrefix,
+                    metricsRegistry.fetcherMetrics,
                     this.time,
-                    this.retryBackoffMs);
+                    this.retryBackoffMs,
+                    isolationLevel);
 
             config.logUnused();
+            AppInfoParser.registerAppInfo(JMX_PREFIX, clientId);
 
             log.debug("Kafka consumer created");
         } catch (Throwable t) {
@@ -283,6 +293,16 @@ public class BelinkConsumer<K, V> implements Consumer<K, V> {
         this.metadata = metadata;
         this.retryBackoffMs = retryBackoffMs;
         this.requestTimeoutMs = requestTimeoutMs;
+    }
+
+    private ClusterResourceListeners configureClusterResourceListeners(Deserializer<K> keyDeserializer, Deserializer<V> valueDeserializer, List<?>... candidateLists) {
+        ClusterResourceListeners clusterResourceListeners = new ClusterResourceListeners();
+        for (List<?> candidateList: candidateLists)
+            clusterResourceListeners.maybeAddAll(candidateList);
+
+        clusterResourceListeners.maybeAdd(keyDeserializer);
+        clusterResourceListeners.maybeAdd(valueDeserializer);
+        return clusterResourceListeners;
     }
 
     /**
@@ -874,7 +894,7 @@ public class BelinkConsumer<K, V> implements Consumer<K, V> {
                 return parts;
 
             Map<String, List<PartitionInfo>> topicMetadata = fetcher.getTopicMetadata(
-                    new MetadataRequest.Builder(Collections.singletonList(topic)), requestTimeoutMs);
+                    new MetadataRequest.Builder(Collections.singletonList(topic), true), requestTimeoutMs);
             return topicMetadata.get(topic);
         } finally {
             release();

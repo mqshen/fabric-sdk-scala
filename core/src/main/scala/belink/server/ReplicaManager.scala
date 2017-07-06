@@ -13,6 +13,7 @@ import com.ynet.belink.common.metrics.Metrics
 import com.ynet.belink.common.protocol.Errors
 import com.ynet.belink.common.record.{MemoryRecords, Records}
 import com.ynet.belink.common.requests.FetchRequest.PartitionData
+import com.ynet.belink.common.requests.IsolationLevel
 import com.ynet.belink.common.requests.ProduceResponse.PartitionResponse
 import com.ynet.belink.common.utils.Time
 
@@ -164,7 +165,8 @@ class ReplicaManager(val config: BelinkConfig,
                        fetchMaxBytes: Int,
                        hardMaxBytesLimit: Boolean,
                        readPartitionInfo: Seq[(TopicPartition, PartitionData)],
-                       quota: ReplicaQuota): Seq[(TopicPartition, LogReadResult)] = {
+                       quota: ReplicaQuota,
+                       isolationLevel: IsolationLevel): Seq[(TopicPartition, LogReadResult)] = {
 
     def read(tp: TopicPartition, fetchInfo: PartitionData, limitBytes: Int, minOneMessage: Boolean): LogReadResult = {
       val offset = fetchInfo.fetchOffset
@@ -203,7 +205,7 @@ class ReplicaManager(val config: BelinkConfig,
             val adjustedFetchSize = math.min(partitionFetchSize, limitBytes)
 
             // Try the read first, this tells us whether we need all of adjustedFetchSize for this partition
-            val fetch = log.read(offset, adjustedFetchSize, maxOffsetOpt, minOneMessage)
+            val fetch = log.read(offset, adjustedFetchSize, maxOffsetOpt, minOneMessage, isolationLevel)
 
             // If the partition is being throttled, simply return an empty set.
             if (shouldLeaderThrottle(quota, tp, replicaId))

@@ -45,6 +45,7 @@ object Build extends Build {
     .settings(formatSettings: _*)
     .settings(releaseSettings: _*)
     .settings(libraryDependencies ++= (Dependencies.all ) )
+    .dependsOn(clients)
 
 	lazy val scalaPbSettings = Seq(
     PB.targets in Compile := Seq(

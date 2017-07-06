@@ -16,16 +16,16 @@
  */
 package com.ynet.belink.clients.consumer.internals;
 
-import  com.ynet.belink.clients.*;
-import  com.ynet.belink.common.Node;
-import  com.ynet.belink.common.errors.DisconnectException;
-import  com.ynet.belink.common.errors.InterruptException;
-import  com.ynet.belink.common.errors.TimeoutException;
-import  com.ynet.belink.common.errors.WakeupException;
-import  com.ynet.belink.common.protocol.ApiKeys;
-import  com.ynet.belink.common.requests.AbstractRequest;
-import  com.ynet.belink.common.requests.RequestHeader;
-import  com.ynet.belink.common.utils.Time;
+import com.ynet.belink.clients.*;
+import com.ynet.belink.common.Node;
+import com.ynet.belink.common.errors.DisconnectException;
+import com.ynet.belink.common.errors.InterruptException;
+import com.ynet.belink.common.errors.TimeoutException;
+import com.ynet.belink.common.errors.WakeupException;
+import com.ynet.belink.common.protocol.ApiKeys;
+import com.ynet.belink.common.requests.AbstractRequest;
+import com.ynet.belink.common.requests.RequestHeader;
+import com.ynet.belink.common.utils.Time;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -100,10 +100,12 @@ public class ConsumerNetworkClient implements Closeable {
         return completionHandler.future;
     }
 
-    public Node leastLoadedNode() {
-        synchronized (this) {
-            return client.leastLoadedNode(time.milliseconds());
-        }
+    public synchronized Node leastLoadedNode() {
+        return client.leastLoadedNode(time.milliseconds());
+    }
+
+    public synchronized boolean hasReadyNodes() {
+        return client.hasReadyNodes();
     }
 
     /**
@@ -497,7 +499,7 @@ public class ConsumerNetworkClient implements Closeable {
      * the caller is awaiting has already been satisfied prior to the invocation of poll. We therefore
      * introduce this interface to push the condition checking as close as possible to the invocation
      * of poll. In particular, the check will be done while holding the lock used to protect concurrent
-     * access to {@link  com.ynet.belink.clients.NetworkClient}, which means implementations must be
+     * access to {@link com.ynet.belink.clients.NetworkClient}, which means implementations must be
      * very careful about locking order if the callback must acquire additional locks.
      */
     public interface PollCondition {

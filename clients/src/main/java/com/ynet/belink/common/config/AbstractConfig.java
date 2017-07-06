@@ -16,8 +16,8 @@
  */
 package com.ynet.belink.common.config;
 
-import com.ynet.belink.common.BelinkException;
 import com.ynet.belink.common.Configurable;
+import com.ynet.belink.common.BelinkException;
 import com.ynet.belink.common.config.types.Password;
 import com.ynet.belink.common.utils.Utils;
 import org.slf4j.Logger;
@@ -53,6 +53,11 @@ public class AbstractConfig {
                 throw new ConfigException(entry.getKey().toString(), entry.getValue(), "Key must be a string.");
         this.originals = (Map<String, ?>) originals;
         this.values = definition.parse(this.originals);
+        Map<String, Object> configUpdates = postProcessParsedConfig(Collections.unmodifiableMap(this.values));
+        for (Map.Entry<String, Object> update : configUpdates.entrySet()) {
+            this.values.put(update.getKey(), update.getValue());
+        }
+        definition.parse(this.values);
         this.used = Collections.synchronizedSet(new HashSet<String>());
         this.definition = definition;
         if (doLog)
@@ -61,6 +66,17 @@ public class AbstractConfig {
 
     public AbstractConfig(ConfigDef definition, Map<?, ?> originals) {
         this(definition, originals, true);
+    }
+
+    /**
+     * Called directly after user configs got parsed (and thus default values got set).
+     * This allows to change default values for "secondary defaults" if required.
+     *
+     * @param parsedValues unmodifiable map of current configuration
+     * @return a map of updates that should be applied to the configuration (will be validated to prevent bad updates)
+     */
+    protected Map<String, Object> postProcessParsedConfig(Map<String, Object> parsedValues) {
+        return Collections.emptyMap();
     }
 
     protected Object get(String key) {
@@ -101,6 +117,13 @@ public class AbstractConfig {
 
     public String getString(String key) {
         return (String) get(key);
+    }
+
+    public ConfigDef.Type typeOf(String key) {
+        ConfigDef.ConfigKey configKey = definition.configKeys().get(key);
+        if (configKey == null)
+            return null;
+        return configKey.type;
     }
 
     public Password getPassword(String key) {

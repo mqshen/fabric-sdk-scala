@@ -15,6 +15,9 @@ public class BelinkChannel {
     private final String id;
     private final TransportLayer transportLayer;
     private final Authenticator authenticator;
+    // Tracks accumulated network thread time. This is updated on the network thread.
+    // The values are read and reset after each response is sent.
+    private long networkThreadTimeNanos;
     private final int maxReceiveSize;
     private NetworkReceive receive;
     private Send send;
@@ -22,14 +25,17 @@ public class BelinkChannel {
     // processed after the channel is disconnected.
     private boolean disconnected;
     private boolean muted;
+    private ChannelState state;
 
     public BelinkChannel(String id, TransportLayer transportLayer, Authenticator authenticator, int maxReceiveSize) throws IOException {
         this.id = id;
         this.transportLayer = transportLayer;
         this.authenticator = authenticator;
+        this.networkThreadTimeNanos = 0L;
         this.maxReceiveSize = maxReceiveSize;
         this.disconnected = false;
         this.muted = false;
+        this.state = ChannelState.NOT_CONNECTED;
     }
 
     public void close() throws IOException {
@@ -52,6 +58,8 @@ public class BelinkChannel {
             transportLayer.handshake();
         if (transportLayer.ready() && !authenticator.complete())
             authenticator.authenticate();
+        if (ready())
+            state = ChannelState.READY;
     }
 
     public void disconnect() {
@@ -59,9 +67,19 @@ public class BelinkChannel {
         transportLayer.disconnect();
     }
 
+    public void state(ChannelState state) {
+        this.state = state;
+    }
+
+    public ChannelState state() {
+        return this.state;
+    }
 
     public boolean finishConnect() throws IOException {
-        return transportLayer.finishConnect();
+        boolean connected = transportLayer.finishConnect();
+        if (connected)
+            state = ready() ? ChannelState.READY : ChannelState.AUTHENTICATE;
+        return connected;
     }
 
     public boolean isConnected() {
@@ -146,6 +164,23 @@ public class BelinkChannel {
             send = null;
         }
         return result;
+    }
+
+    /**
+     * Accumulates network thread time for this channel.
+     */
+    public void addNetworkThreadTimeNanos(long nanos) {
+        networkThreadTimeNanos += nanos;
+    }
+
+    /**
+     * Returns accumulated network thread time for this channel and resets
+     * the value to zero.
+     */
+    public long getAndResetNetworkThreadTimeNanos() {
+        long current = networkThreadTimeNanos;
+        networkThreadTimeNanos = 0;
+        return current;
     }
 
     private long receive(NetworkReceive receive) throws IOException {

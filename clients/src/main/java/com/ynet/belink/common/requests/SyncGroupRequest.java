@@ -16,10 +16,10 @@
  */
 package com.ynet.belink.common.requests;
 
-import  com.ynet.belink.common.protocol.ApiKeys;
-import  com.ynet.belink.common.protocol.Errors;
-import  com.ynet.belink.common.protocol.types.Struct;
-import  com.ynet.belink.common.utils.Utils;
+import com.ynet.belink.common.protocol.ApiKeys;
+import com.ynet.belink.common.protocol.Errors;
+import com.ynet.belink.common.protocol.types.Struct;
+import com.ynet.belink.common.utils.Utils;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -98,11 +98,16 @@ public class SyncGroupRequest extends AbstractRequest {
     }
 
     @Override
-    public AbstractResponse getErrorResponse(Throwable e) {
+    public AbstractResponse getErrorResponse(int throttleTimeMs, Throwable e) {
         short versionId = version();
         switch (versionId) {
             case 0:
                 return new SyncGroupResponse(
+                        Errors.forException(e),
+                        ByteBuffer.wrap(new byte[]{}));
+            case 1:
+                return new SyncGroupResponse(
+                        throttleTimeMs,
                         Errors.forException(e),
                         ByteBuffer.wrap(new byte[]{}));
             default:

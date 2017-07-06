@@ -16,6 +16,7 @@
  */
 package com.ynet.belink.common.record;
 
+import com.ynet.belink.common.header.Header;
 import com.ynet.belink.common.utils.Utils;
 
 import java.nio.ByteBuffer;

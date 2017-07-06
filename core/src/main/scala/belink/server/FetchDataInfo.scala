@@ -18,7 +18,9 @@
 package belink.server
 
 import com.ynet.belink.common.record.Records
+import com.ynet.belink.common.requests.FetchResponse.AbortedTransaction
 
 case class FetchDataInfo(fetchOffsetMetadata: LogOffsetMetadata,
                          records: Records,
-                         firstEntryIncomplete: Boolean = false)
+                         firstEntryIncomplete: Boolean = false,
+                         abortedTransactions: Option[List[AbortedTransaction]] = None)

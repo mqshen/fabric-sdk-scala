@@ -20,9 +20,9 @@ package belink.log
 import java.io.File
 import java.nio.ByteBuffer
 
-import belink.utils.CoreUtils._
-import com.ynet.belink.common.errors.InvalidOffsetException
 
+import belink.utils.CoreUtils.inLock
+import belink.common.InvalidOffsetException
 /**
  * An index that maps offsets to physical file locations for a particular log segment. This index may be sparse:
  * that is it may not hold an entry for all messages in the log.
@@ -48,8 +48,8 @@ import com.ynet.belink.common.errors.InvalidOffsetException
  * All external APIs translate from relative offsets to full offsets, so users of this class do not interact with the internal 
  * storage format.
  */
-class OffsetIndex(file: File, baseOffset: Long, maxIndexSize: Int = -1)
-    extends AbstractIndex[Long, Int](file, baseOffset, maxIndexSize) {
+class OffsetIndex(file: File, baseOffset: Long, maxIndexSize: Int = -1, writable: Boolean = true)
+    extends AbstractIndex[Long, Int](file, baseOffset, maxIndexSize, writable) {
 
   override def entrySize = 8
   
@@ -85,11 +85,27 @@ class OffsetIndex(file: File, baseOffset: Long, maxIndexSize: Int = -1)
   def lookup(targetOffset: Long): OffsetPosition = {
     maybeLock(lock) {
       val idx = mmap.duplicate
-      val slot = indexSlotFor(idx, targetOffset, IndexSearchType.KEY)
+      val slot = largestLowerBoundSlotFor(idx, targetOffset, IndexSearchType.KEY)
       if(slot == -1)
         OffsetPosition(baseOffset, 0)
       else
         parseEntry(idx, slot).asInstanceOf[OffsetPosition]
+    }
+  }
+
+  /**
+   * Find an upper bound offset for the given fetch starting position and size. This is an offset which
+   * is guaranteed to be outside the fetched range, but note that it will not generally be the smallest
+   * such offset.
+   */
+  def fetchUpperBoundOffset(fetchOffset: OffsetPosition, fetchSize: Int): Option[OffsetPosition] = {
+    maybeLock(lock) {
+      val idx = mmap.duplicate
+      val slot = smallestUpperBoundSlotFor(idx, fetchOffset.position + fetchSize, IndexSearchType.VALUE)
+      if (slot == -1)
+        None
+      else
+        Some(parseEntry(idx, slot).asInstanceOf[OffsetPosition])
     }
   }
 
@@ -140,7 +156,7 @@ class OffsetIndex(file: File, baseOffset: Long, maxIndexSize: Int = -1)
   override def truncateTo(offset: Long) {
     inLock(lock) {
       val idx = mmap.duplicate
-      val slot = indexSlotFor(idx, offset, IndexSearchType.KEY)
+      val slot = largestLowerBoundSlotFor(idx, offset, IndexSearchType.KEY)
 
       /* There are 3 cases for choosing the new size
        * 1) if there is no entry in the index <= the offset, delete everything

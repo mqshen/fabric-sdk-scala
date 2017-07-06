@@ -16,25 +16,27 @@
  */
 package com.ynet.belink.clients.consumer.internals;
 
-import  com.ynet.belink.clients.ClientResponse;
-import  com.ynet.belink.clients.Metadata;
-import  com.ynet.belink.clients.consumer.*;
+
 import com.ynet.belink.clients.consumer.OffsetOutOfRangeException;
-import  com.ynet.belink.common.*;
-import  com.ynet.belink.common.errors.*;
-import  com.ynet.belink.common.metrics.Metrics;
-import  com.ynet.belink.common.metrics.Sensor;
-import  com.ynet.belink.common.metrics.stats.*;
-import  com.ynet.belink.common.protocol.Errors;
-import  com.ynet.belink.common.record.InvalidRecordException;
-import  com.ynet.belink.common.record.Record;
-import  com.ynet.belink.common.record.RecordBatch;
-import  com.ynet.belink.common.record.TimestampType;
-import  com.ynet.belink.common.requests.*;
-import  com.ynet.belink.common.serialization.Deserializer;
-import  com.ynet.belink.common.utils.CloseableIterator;
-import  com.ynet.belink.common.utils.Time;
-import  com.ynet.belink.common.utils.Utils;
+import com.ynet.belink.clients.ClientResponse;
+import com.ynet.belink.clients.Metadata;
+import com.ynet.belink.clients.consumer.*;
+import com.ynet.belink.common.*;
+import com.ynet.belink.common.errors.*;
+import com.ynet.belink.common.header.Headers;
+import com.ynet.belink.common.header.internals.FetcherMetricsRegistry;
+import com.ynet.belink.common.header.internals.RecordHeaders;
+import com.ynet.belink.common.metrics.Metrics;
+import com.ynet.belink.common.metrics.Sensor;
+import com.ynet.belink.common.metrics.stats.*;
+import com.ynet.belink.common.protocol.Errors;
+import com.ynet.belink.common.record.*;
+import com.ynet.belink.common.requests.*;
+import com.ynet.belink.common.serialization.Deserializer;
+import com.ynet.belink.common.serialization.ExtendedDeserializer;
+import com.ynet.belink.common.utils.CloseableIterator;
+import com.ynet.belink.common.utils.Time;
+import com.ynet.belink.common.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -43,6 +45,9 @@ import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import static java.util.Collections.emptyList;
+import static com.ynet.belink.common.serialization.ExtendedDeserializer.Wrapper.ensureExtended;
 
 /**
  * This class manage the fetching process with the brokers.
@@ -64,8 +69,11 @@ public class Fetcher<K, V> implements SubscriptionState.Listener, Closeable {
     private final FetchManagerMetrics sensors;
     private final SubscriptionState subscriptions;
     private final ConcurrentLinkedQueue<CompletedFetch> completedFetches;
-    private final Deserializer<K> keyDeserializer;
-    private final Deserializer<V> valueDeserializer;
+    private final BufferSupplier decompressionBufferSupplier = BufferSupplier.create();
+
+    private final ExtendedDeserializer<K> keyDeserializer;
+    private final ExtendedDeserializer<V> valueDeserializer;
+    private final IsolationLevel isolationLevel;
 
     private PartitionRecords nextInLineRecords = null;
 
@@ -81,9 +89,10 @@ public class Fetcher<K, V> implements SubscriptionState.Listener, Closeable {
                    Metadata metadata,
                    SubscriptionState subscriptions,
                    Metrics metrics,
-                   String metricGrpPrefix,
+                   FetcherMetricsRegistry metricsRegistry,
                    Time time,
-                   long retryBackoffMs) {
+                   long retryBackoffMs,
+                   IsolationLevel isolationLevel) {
         this.time = time;
         this.client = client;
         this.metadata = metadata;
@@ -94,11 +103,12 @@ public class Fetcher<K, V> implements SubscriptionState.Listener, Closeable {
         this.fetchSize = fetchSize;
         this.maxPollRecords = maxPollRecords;
         this.checkCrcs = checkCrcs;
-        this.keyDeserializer = keyDeserializer;
-        this.valueDeserializer = valueDeserializer;
+        this.keyDeserializer = ensureExtended(keyDeserializer);
+        this.valueDeserializer = ensureExtended(valueDeserializer);
         this.completedFetches = new ConcurrentLinkedQueue<>();
-        this.sensors = new FetchManagerMetrics(metrics, metricGrpPrefix);
+        this.sensors = new FetchManagerMetrics(metrics, metricsRegistry);
         this.retryBackoffMs = retryBackoffMs;
+        this.isolationLevel = isolationLevel;
 
         subscriptions.addListener(this);
     }
@@ -150,7 +160,8 @@ public class Fetcher<K, V> implements SubscriptionState.Listener, Closeable {
             final FetchRequest.Builder request = fetchEntry.getValue();
             final Node fetchTarget = fetchEntry.getKey();
 
-            log.debug("Sending fetch for partitions {} to broker {}", request.fetchData().keySet(), fetchTarget);
+            log.debug("Sending {} fetch for partitions {} to broker {}", isolationLevel, request.fetchData().keySet(),
+                    fetchTarget);
             client.send(fetchTarget, request)
                     .addListener(new RequestFutureListener<ClientResponse>() {
                         @Override
@@ -172,17 +183,19 @@ public class Fetcher<K, V> implements SubscriptionState.Listener, Closeable {
                                 TopicPartition partition = entry.getKey();
                                 long fetchOffset = request.fetchData().get(partition).fetchOffset;
                                 FetchResponse.PartitionData fetchData = entry.getValue();
+
+                                log.debug("Fetch {} at offset {} for partition {} returned fetch data {}",
+                                        isolationLevel, fetchOffset, partition, fetchData);
                                 completedFetches.add(new CompletedFetch(partition, fetchOffset, fetchData, metricAggregator,
                                         resp.requestHeader().apiVersion()));
                             }
 
                             sensors.fetchLatency.record(resp.requestLatencyMs());
-                            sensors.fetchThrottleTimeSensor.record(response.throttleTimeMs());
                         }
 
                         @Override
                         public void onFailure(RuntimeException e) {
-                            log.debug("Fetch request to {} for partitions {} failed", fetchTarget, request.fetchData().keySet(), e);
+                            log.debug("Fetch request {} to {} failed", request.fetchData(), fetchTarget, e);
                         }
                     });
         }
@@ -194,10 +207,13 @@ public class Fetcher<K, V> implements SubscriptionState.Listener, Closeable {
      * @param partitions the partitions to reset
      */
     public void resetOffsetsIfNeeded(Set<TopicPartition> partitions) {
+        final Set<TopicPartition> needsOffsetReset = new HashSet<>();
         for (TopicPartition tp : partitions) {
-            // TODO: If there are several offsets to reset, we could submit offset requests in parallel
             if (subscriptions.isAssigned(tp) && subscriptions.isOffsetResetNeeded(tp))
-                resetOffset(tp);
+                needsOffsetReset.add(tp);
+        }
+        if (!needsOffsetReset.isEmpty()) {
+            resetOffsets(needsOffsetReset);
         }
     }
 
@@ -207,22 +223,27 @@ public class Fetcher<K, V> implements SubscriptionState.Listener, Closeable {
      * @throws NoOffsetForPartitionException If no offset is stored for a given partition and no reset policy is available
      */
     public void updateFetchPositions(Set<TopicPartition> partitions) {
+        final Set<TopicPartition> needsOffsetReset = new HashSet<>();
         // reset the fetch position to the committed position
         for (TopicPartition tp : partitions) {
             if (!subscriptions.isAssigned(tp) || subscriptions.hasValidPosition(tp))
                 continue;
 
             if (subscriptions.isOffsetResetNeeded(tp)) {
-                resetOffset(tp);
+                needsOffsetReset.add(tp);
             } else if (subscriptions.committed(tp) == null) {
                 // there's no committed position, so we need to reset with the default strategy
                 subscriptions.needOffsetReset(tp);
-                resetOffset(tp);
+                needsOffsetReset.add(tp);
             } else {
                 long committed = subscriptions.committed(tp).offset();
                 log.debug("Resetting offset for partition {} to the committed offset {}", tp, committed);
                 subscriptions.seek(tp, committed);
             }
+        }
+
+        if (!needsOffsetReset.isEmpty()) {
+            resetOffsets(needsOffsetReset);
         }
     }
 
@@ -259,6 +280,11 @@ public class Fetcher<K, V> implements SubscriptionState.Listener, Closeable {
 
             if (future.succeeded()) {
                 MetadataResponse response = (MetadataResponse) future.value().responseBody();
+                Cluster cluster = response.cluster();
+
+                Set<String> unauthorizedTopics = cluster.unauthorizedTopics();
+                if (!unauthorizedTopics.isEmpty())
+                    throw new TopicAuthorizationException(unauthorizedTopics);
 
                 boolean shouldRetry = false;
                 Map<String, Errors> errors = response.errors();
@@ -286,6 +312,12 @@ public class Fetcher<K, V> implements SubscriptionState.Listener, Closeable {
                     }
                 }
 
+                if (!shouldRetry) {
+                    HashMap<String, List<PartitionInfo>> topicsPartitionInfos = new HashMap<>();
+                    for (String topic : cluster.topics())
+                        topicsPartitionInfos.put(topic, cluster.availablePartitionsForTopic(topic));
+                    return topicsPartitionInfos;
+                }
             }
 
             long elapsed = time.milliseconds() - start;
@@ -313,31 +345,47 @@ public class Fetcher<K, V> implements SubscriptionState.Listener, Closeable {
             return client.send(node, request);
     }
 
+    private void offsetResetStrategyTimestamp(
+            final TopicPartition partition,
+            final Map<TopicPartition, Long> output,
+            final Set<TopicPartition> partitionsWithNoOffsets) {
+        OffsetResetStrategy strategy = subscriptions.resetStrategy(partition);
+        if (strategy == OffsetResetStrategy.EARLIEST)
+            output.put(partition, ListOffsetRequest.EARLIEST_TIMESTAMP);
+        else if (strategy == OffsetResetStrategy.LATEST)
+            output.put(partition, endTimestamp());
+        else
+            partitionsWithNoOffsets.add(partition);
+    }
+
     /**
      * Reset offsets for the given partition using the offset reset strategy.
      *
-     * @param partition The given partition that needs reset offset
-     * @throws  com.ynet.belink.clients.consumer.NoOffsetForPartitionException If no offset reset strategy is defined
+     * @param partitions  The partitions that need offsets reset
+     * @throws com.ynet.belink.clients.consumer.NoOffsetForPartitionException If no offset reset strategy is defined
      */
-    private void resetOffset(TopicPartition partition) {
-        OffsetResetStrategy strategy = subscriptions.resetStrategy(partition);
-        log.debug("Resetting offset for partition {} to {} offset.", partition, strategy.name().toLowerCase(Locale.ROOT));
-        final long timestamp;
-        if (strategy == OffsetResetStrategy.EARLIEST)
-            timestamp = ListOffsetRequest.EARLIEST_TIMESTAMP;
-        else if (strategy == OffsetResetStrategy.LATEST)
-            timestamp = ListOffsetRequest.LATEST_TIMESTAMP;
-        else
-            throw new NoOffsetForPartitionException(partition);
-        Map<TopicPartition, OffsetData> offsetsByTimes = retrieveOffsetsByTimes(
-                Collections.singletonMap(partition, timestamp), Long.MAX_VALUE, false);
-        OffsetData offsetData = offsetsByTimes.get(partition);
-        if (offsetData == null)
-            throw new NoOffsetForPartitionException(partition);
-        long offset = offsetData.offset;
-        // we might lose the assignment while fetching the offset, so check it is still active
-        if (subscriptions.isAssigned(partition))
-            this.subscriptions.seek(partition, offset);
+    private void resetOffsets(final Set<TopicPartition> partitions) {
+        final Map<TopicPartition, Long> offsetResets = new HashMap<>();
+        final Set<TopicPartition> partitionsWithNoOffsets = new HashSet<>();
+        for (final TopicPartition partition : partitions) {
+            offsetResetStrategyTimestamp(partition, offsetResets, partitionsWithNoOffsets);
+        }
+        final Map<TopicPartition, OffsetData> offsetsByTimes = retrieveOffsetsByTimes(offsetResets, Long.MAX_VALUE, false);
+        for (final TopicPartition partition : partitions) {
+            final OffsetData offsetData = offsetsByTimes.get(partition);
+            if (offsetData == null) {
+                partitionsWithNoOffsets.add(partition);
+                continue;
+            }
+            // we might lose the assignment while fetching the offset, so check it is still active
+            if (subscriptions.isAssigned(partition)) {
+                log.debug("Resetting offset for partition {} to offset {}.", partition, offsetData.offset);
+                this.subscriptions.seek(partition, offsetData.offset);
+            }
+        }
+        if (!partitionsWithNoOffsets.isEmpty()) {
+            throw new NoOffsetForPartitionException(partitionsWithNoOffsets);
+        }
     }
 
     public Map<TopicPartition, OffsetAndTimestamp> getOffsetsByTimes(Map<TopicPartition, Long> timestampsToSearch,
@@ -396,7 +444,11 @@ public class Fetcher<K, V> implements SubscriptionState.Listener, Closeable {
     }
 
     public Map<TopicPartition, Long> endOffsets(Collection<TopicPartition> partitions, long timeout) {
-        return beginningOrEndOffset(partitions, ListOffsetRequest.LATEST_TIMESTAMP, timeout);
+        return beginningOrEndOffset(partitions, endTimestamp(), timeout);
+    }
+
+    private long endTimestamp() {
+        return ListOffsetRequest.LATEST_TIMESTAMP;
     }
 
     private Map<TopicPartition, Long> beginningOrEndOffset(Collection<TopicPartition> partitions,
@@ -426,34 +478,38 @@ public class Fetcher<K, V> implements SubscriptionState.Listener, Closeable {
         Map<TopicPartition, List<ConsumerRecord<K, V>>> fetched = new HashMap<>();
         int recordsRemaining = maxPollRecords;
 
-        while (recordsRemaining > 0) {
-            if (nextInLineRecords == null || nextInLineRecords.isFetched) {
-                CompletedFetch completedFetch = completedFetches.poll();
-                if (completedFetch == null)
-                    break;
+        try {
+            while (recordsRemaining > 0) {
+                if (nextInLineRecords == null || nextInLineRecords.isFetched) {
+                    CompletedFetch completedFetch = completedFetches.peek();
+                    if (completedFetch == null) break;
 
-                nextInLineRecords = parseCompletedFetch(completedFetch);
-            } else {
-                TopicPartition partition = nextInLineRecords.partition;
-                List<ConsumerRecord<K, V>> records = fetchRecords(nextInLineRecords, recordsRemaining);
-                if (!records.isEmpty()) {
-                    List<ConsumerRecord<K, V>> currentRecords = fetched.get(partition);
-                    if (currentRecords == null) {
-                        fetched.put(partition, records);
-                    } else {
-                        // this case shouldn't usually happen because we only send one fetch at a time per partition,
-                        // but it might conceivably happen in some rare cases (such as partition leader changes).
-                        // we have to copy to a new list because the old one may be immutable
-                        List<ConsumerRecord<K, V>> newRecords = new ArrayList<>(records.size() + currentRecords.size());
-                        newRecords.addAll(currentRecords);
-                        newRecords.addAll(records);
-                        fetched.put(partition, newRecords);
+                    nextInLineRecords = parseCompletedFetch(completedFetch);
+                    completedFetches.poll();
+                } else {
+                    List<ConsumerRecord<K, V>> records = fetchRecords(nextInLineRecords, recordsRemaining);
+                    TopicPartition partition = nextInLineRecords.partition;
+                    if (!records.isEmpty()) {
+                        List<ConsumerRecord<K, V>> currentRecords = fetched.get(partition);
+                        if (currentRecords == null) {
+                            fetched.put(partition, records);
+                        } else {
+                            // this case shouldn't usually happen because we only send one fetch at a time per partition,
+                            // but it might conceivably happen in some rare cases (such as partition leader changes).
+                            // we have to copy to a new list because the old one may be immutable
+                            List<ConsumerRecord<K, V>> newRecords = new ArrayList<>(records.size() + currentRecords.size());
+                            newRecords.addAll(currentRecords);
+                            newRecords.addAll(records);
+                            fetched.put(partition, newRecords);
+                        }
+                        recordsRemaining -= records.size();
                     }
-                    recordsRemaining -= records.size();
                 }
             }
+        } catch (BelinkException e) {
+            if (fetched.isEmpty())
+                throw e;
         }
-
         return fetched;
     }
 
@@ -477,7 +533,7 @@ public class Fetcher<K, V> implements SubscriptionState.Listener, Closeable {
                         "position to {}", position, partitionRecords.partition, nextOffset);
                 subscriptions.position(partitionRecords.partition, nextOffset);
 
-                Long partitionLag = subscriptions.partitionLag(partitionRecords.partition);
+                Long partitionLag = subscriptions.partitionLag(partitionRecords.partition, isolationLevel);
                 if (partitionLag != null)
                     this.sensors.recordPartitionLag(partitionRecords.partition, partitionLag);
 
@@ -491,7 +547,7 @@ public class Fetcher<K, V> implements SubscriptionState.Listener, Closeable {
         }
 
         partitionRecords.drain();
-        return Collections.emptyList();
+        return emptyList();
     }
 
     /**
@@ -567,7 +623,8 @@ public class Fetcher<K, V> implements SubscriptionState.Listener, Closeable {
     private RequestFuture<Map<TopicPartition, OffsetData>> sendListOffsetRequest(final Node node,
                                                                                  final Map<TopicPartition, Long> timestampsToSearch,
                                                                                  boolean requireTimestamp) {
-        ListOffsetRequest.Builder builder = ListOffsetRequest.Builder.forConsumer(requireTimestamp)
+        ListOffsetRequest.Builder builder = ListOffsetRequest.Builder
+                .forConsumer(requireTimestamp, isolationLevel)
                 .setTargetTimes(timestampsToSearch);
 
         log.trace("Sending ListOffsetRequest {} to broker {}", builder, node);
@@ -586,7 +643,10 @@ public class Fetcher<K, V> implements SubscriptionState.Listener, Closeable {
      * Callback for the response of the list offset call above.
      * @param timestampsToSearch The mapping from partitions to target timestamps
      * @param listOffsetResponse The response from the server.
-     * @param future The future to be completed by the response.
+     * @param future The future to be completed when the response returns. Note that any partition-level errors will
+     *               generally fail the entire future result. The one exception is UNSUPPORTED_FOR_MESSAGE_FORMAT,
+     *               which indicates that the broker does not support the v1 message format and results in a null
+     *               being inserted into the resulting map.
      */
     @SuppressWarnings("deprecation")
     private void handleListOffsetResponse(Map<TopicPartition, Long> timestampsToSearch,
@@ -634,13 +694,16 @@ public class Fetcher<K, V> implements SubscriptionState.Listener, Closeable {
                 log.debug("Attempt to fetch offsets for partition {} failed due to obsolete leadership information, retrying.",
                         topicPartition);
                 future.raise(error);
+                return;
             } else if (error == Errors.UNKNOWN_TOPIC_OR_PARTITION) {
                 log.warn("Received unknown topic or partition error in ListOffset request for partition {}. The topic/partition " +
-                        "may not exist or the user may not have Describe access to it", topicPartition);
+                        "may not exist or the user may not have Describe access to it.", topicPartition);
                 future.raise(error);
+                return;
             } else {
                 log.warn("Attempt to fetch offsets for partition {} failed due to: {}", topicPartition, error.message());
                 future.raise(new StaleMetadataException());
+                return;
             }
         }
         if (!future.isDone())
@@ -681,8 +744,10 @@ public class Fetcher<K, V> implements SubscriptionState.Listener, Closeable {
                 }
 
                 long position = this.subscriptions.position(partition);
-                fetch.put(partition, new FetchRequest.PartitionData(position, FetchRequest.INVALID_LOG_START_OFFSET, this.fetchSize));
-                log.trace("Added fetch request for partition {} at offset {} to node {}", partition, position, node);
+                fetch.put(partition, new FetchRequest.PartitionData(position, FetchRequest.INVALID_LOG_START_OFFSET,
+                        this.fetchSize));
+                log.debug("Added {} fetch request for partition {} at offset {} to node {}", isolationLevel,
+                        partition, position, node);
             } else {
                 log.trace("Skipping fetch for partition {} because there is an in-flight request to {}", partition, node);
             }
@@ -692,8 +757,9 @@ public class Fetcher<K, V> implements SubscriptionState.Listener, Closeable {
         Map<Node, FetchRequest.Builder> requests = new HashMap<>();
         for (Map.Entry<Node, LinkedHashMap<TopicPartition, FetchRequest.PartitionData>> entry : fetchable.entrySet()) {
             Node node = entry.getKey();
-            FetchRequest.Builder fetch = FetchRequest.Builder.forConsumer(this.maxWaitMs, this.minBytes, entry.getValue()).
-                    setMaxBytes(this.maxBytes);
+            FetchRequest.Builder fetch = FetchRequest.Builder.forConsumer(this.maxWaitMs, this.minBytes,
+                    entry.getValue(), isolationLevel)
+                    .setMaxBytes(this.maxBytes);
             requests.put(node, fetch);
         }
         return requests;
@@ -751,6 +817,11 @@ public class Fetcher<K, V> implements SubscriptionState.Listener, Closeable {
                     log.trace("Updating high watermark for partition {} to {}", tp, partition.highWatermark);
                     subscriptions.updateHighWatermark(tp, partition.highWatermark);
                 }
+
+                if (partition.lastStableOffset >= 0) {
+                    log.trace("Updating last stable offset for partition {} to {}", tp, partition.lastStableOffset);
+                    subscriptions.updateLastStableOffset(tp, partition.lastStableOffset);
+                }
             } else if (error == Errors.NOT_LEADER_FOR_PARTITION) {
                 log.debug("Error in fetch for partition {}: {}", tp, error.exceptionName());
                 this.metadata.requestUpdate();
@@ -789,23 +860,29 @@ public class Fetcher<K, V> implements SubscriptionState.Listener, Closeable {
         return partitionRecords;
     }
 
-    private ConsumerRecord<K, V> parseRecord(TopicPartition partition, RecordBatch batch, Record record) {
+
+    /**
+     * Parse the record entry, deserializing the key / value fields if necessary
+     */
+    private ConsumerRecord<K, V> parseRecord(TopicPartition partition,
+                                             RecordBatch batch,
+                                             Record record) {
         try {
             long offset = record.offset();
             long timestamp = record.timestamp();
             TimestampType timestampType = batch.timestampType();
+            Headers headers = new RecordHeaders(record.headers());
             ByteBuffer keyBytes = record.key();
             byte[] keyByteArray = keyBytes == null ? null : Utils.toArray(keyBytes);
-            K key = keyBytes == null ? null : this.keyDeserializer.deserialize(partition.topic(), keyByteArray);
+            K key = keyBytes == null ? null : this.keyDeserializer.deserialize(partition.topic(), headers, keyByteArray);
             ByteBuffer valueBytes = record.value();
             byte[] valueByteArray = valueBytes == null ? null : Utils.toArray(valueBytes);
-            V value = valueBytes == null ? null : this.valueDeserializer.deserialize(partition.topic(), valueByteArray);
-
+            V value = valueBytes == null ? null : this.valueDeserializer.deserialize(partition.topic(), headers, valueByteArray);
             return new ConsumerRecord<>(partition.topic(), partition.partition(), offset,
-                                        timestamp, timestampType, record.checksum(),
+                                        timestamp, timestampType, record.checksumOrNull(),
                                         keyByteArray == null ? ConsumerRecord.NULL_SIZE : keyByteArray.length,
                                         valueByteArray == null ? ConsumerRecord.NULL_SIZE : valueByteArray.length,
-                                        key, value);
+                                        key, value, headers);
         } catch (RuntimeException e) {
             throw new SerializationException("Error deserializing key/value for partition " + partition +
                     " at offset " + record.offset(), e);
@@ -817,17 +894,30 @@ public class Fetcher<K, V> implements SubscriptionState.Listener, Closeable {
         sensors.updatePartitionLagSensors(assignment);
     }
 
+    public static Sensor throttleTimeSensor(Metrics metrics, FetcherMetricsRegistry metricsRegistry) {
+        Sensor fetchThrottleTimeSensor = metrics.sensor("fetch-throttle-time");
+        fetchThrottleTimeSensor.add(metrics.metricInstance(metricsRegistry.fetchThrottleTimeAvg), new Avg());
+
+        fetchThrottleTimeSensor.add(metrics.metricInstance(metricsRegistry.fetchThrottleTimeMax), new Max());
+
+        return fetchThrottleTimeSensor;
+    }
+
     private class PartitionRecords {
         private final TopicPartition partition;
         private final CompletedFetch completedFetch;
         private final Iterator<? extends RecordBatch> batches;
+        private final Set<Long> abortedProducerIds;
+        private final PriorityQueue<FetchResponse.AbortedTransaction> abortedTransactions;
 
         private int recordsRead;
         private int bytesRead;
         private RecordBatch currentBatch;
+        private Record lastRecord;
         private CloseableIterator<Record> records;
         private long nextFetchOffset;
         private boolean isFetched = false;
+        private boolean hasExceptionInLastFetch;
 
         private PartitionRecords(TopicPartition partition,
                                  CompletedFetch completedFetch,
@@ -836,12 +926,15 @@ public class Fetcher<K, V> implements SubscriptionState.Listener, Closeable {
             this.completedFetch = completedFetch;
             this.batches = batches;
             this.nextFetchOffset = completedFetch.fetchedOffset;
+            this.abortedProducerIds = new HashSet<>();
+            this.abortedTransactions = abortedTransactions(completedFetch.partitionData);
+            this.hasExceptionInLastFetch = false;
         }
 
         private void drain() {
             if (!isFetched) {
                 maybeCloseRecordStream();
-
+                hasExceptionInLastFetch = false;
                 this.isFetched = true;
                 this.completedFetch.metricAggregator.record(partition, bytesRead, recordsRead);
 
@@ -875,34 +968,77 @@ public class Fetcher<K, V> implements SubscriptionState.Listener, Closeable {
         }
 
         private void maybeCloseRecordStream() {
-            if (records != null)
+            if (records != null) {
                 records.close();
+                records = null;
+            }
         }
 
         private Record nextFetchedRecord() {
+            if (hasExceptionInLastFetch) {
+                if (lastRecord == null) {
+                    maybeEnsureValid(currentBatch);
+                } else {
+                    maybeEnsureValid(lastRecord);
+                    return lastRecord;
+                }
+            }
+
             while (true) {
                 if (records == null || !records.hasNext()) {
                     maybeCloseRecordStream();
 
                     if (!batches.hasNext()) {
+                        // Message format v2 preserves the last offset in a batch even if the last record is removed
+                        // through compaction. By using the next offset computed from the last offset in the batch,
+                        // we ensure that the offset of the next fetch will point to the next batch, which avoids
+                        // unnecessary re-fetching of the same batch (in the worst case, the consumer could get stuck
+                        // fetching the same batch repeatedly).
+                        if (currentBatch != null)
+                            nextFetchOffset = currentBatch.nextOffset();
                         drain();
                         return null;
                     }
+
+                    lastRecord = null;
                     currentBatch = batches.next();
                     maybeEnsureValid(currentBatch);
-                    records = currentBatch.streamingIterator();
-                }
 
-                Record record = records.next();
-                maybeEnsureValid(record);
+                    if (isolationLevel == IsolationLevel.READ_COMMITTED && currentBatch.hasProducerId()) {
+                        // remove from the aborted transaction queue all aborted transactions which have begun
+                        // before the current batch's last offset and add the associated producerIds to the
+                        // aborted producer set
+                        consumeAbortedTransactionsUpTo(currentBatch.lastOffset());
 
-                // skip any records out of range
-                if (record.offset() >= nextFetchOffset) {
-                    nextFetchOffset = record.offset() + 1;
+                        long producerId = currentBatch.producerId();
+                        if (containsAbortMarker(currentBatch)) {
+                            abortedProducerIds.remove(producerId);
+                        } else if (isBatchAborted(currentBatch)) {
+                            log.debug("Skipping aborted record batch from partition {} with producerId {} and " +
+                                            "offsets {} to {}",
+                                    partition, producerId, currentBatch.baseOffset(), currentBatch.lastOffset());
+                            nextFetchOffset = currentBatch.nextOffset();
+                            continue;
+                        }
+                    }
 
-                    // control records are not returned to the user
-                    if (!record.isControlRecord())
-                         return record;
+                    records = currentBatch.streamingIterator(decompressionBufferSupplier);
+                } else {
+                    Record record = records.next();
+                    lastRecord = record;
+                    // skip any records out of range
+                    if (record.offset() >= nextFetchOffset) {
+                        // we only do validation when the message should not be skipped.
+                        maybeEnsureValid(record);
+
+                        // control records are not returned to the user
+                        if (!currentBatch.isControlBatch()) {
+                            return record;
+                        } else {
+                            // Increment the next fetch offset when we skip a control batch.
+                            nextFetchOffset = record.offset() + 1;
+                        }
+                    }
                 }
             }
         }
@@ -912,16 +1048,67 @@ public class Fetcher<K, V> implements SubscriptionState.Listener, Closeable {
                 return Collections.emptyList();
 
             List<ConsumerRecord<K, V>> records = new ArrayList<>();
-            for (int i = 0; i < maxRecords; i++) {
-                Record record = nextFetchedRecord();
-                if (record == null)
-                    break;
+            try {
+                for (int i = 0; i < maxRecords; i++) {
+                    Record record = nextFetchedRecord();
+                    if (record == null)
+                        break;
 
-                recordsRead++;
-                bytesRead += record.sizeInBytes();
-                records.add(parseRecord(partition, currentBatch, record));
+                    records.add(parseRecord(partition, currentBatch, record));
+                    recordsRead++;
+                    bytesRead += record.sizeInBytes();
+                    nextFetchOffset = record.offset() + 1;
+                }
+            } catch (BelinkException e) {
+                hasExceptionInLastFetch = true;
+                if (records.isEmpty())
+                    throw e;
             }
             return records;
+        }
+
+        private void consumeAbortedTransactionsUpTo(long offset) {
+            if (abortedTransactions == null)
+                return;
+
+            while (!abortedTransactions.isEmpty() && abortedTransactions.peek().firstOffset <= offset) {
+                FetchResponse.AbortedTransaction abortedTransaction = abortedTransactions.poll();
+                abortedProducerIds.add(abortedTransaction.producerId);
+            }
+        }
+
+        private boolean isBatchAborted(RecordBatch batch) {
+            return batch.isTransactional() && abortedProducerIds.contains(batch.producerId());
+        }
+
+        private PriorityQueue<FetchResponse.AbortedTransaction> abortedTransactions(FetchResponse.PartitionData partition) {
+            if (partition.abortedTransactions == null || partition.abortedTransactions.isEmpty())
+                return null;
+
+            PriorityQueue<FetchResponse.AbortedTransaction> abortedTransactions = new PriorityQueue<>(
+                    partition.abortedTransactions.size(),
+                    new Comparator<FetchResponse.AbortedTransaction>() {
+                        @Override
+                        public int compare(FetchResponse.AbortedTransaction o1, FetchResponse.AbortedTransaction o2) {
+                            return Long.compare(o1.firstOffset, o2.firstOffset);
+                        }
+                    }
+            );
+            abortedTransactions.addAll(partition.abortedTransactions);
+            return abortedTransactions;
+        }
+
+        private boolean containsAbortMarker(RecordBatch batch) {
+            if (!batch.isControlBatch())
+                return false;
+
+            Iterator<Record> batchIterator = batch.iterator();
+            if (!batchIterator.hasNext())
+                throw new InvalidRecordException("Invalid batch for partition " + partition + " at offset " +
+                        batch.baseOffset() + " with control sequence set, but no records");
+
+            Record firstRecord = batchIterator.next();
+            return ControlRecordType.ABORT == ControlRecordType.parse(firstRecord.key());
         }
     }
 
@@ -1006,62 +1193,34 @@ public class Fetcher<K, V> implements SubscriptionState.Listener, Closeable {
 
     private static class FetchManagerMetrics {
         private final Metrics metrics;
-        private final String metricGrpName;
+        private FetcherMetricsRegistry metricsRegistry;
         private final Sensor bytesFetched;
         private final Sensor recordsFetched;
         private final Sensor fetchLatency;
         private final Sensor recordsFetchLag;
-        private final Sensor fetchThrottleTimeSensor;
 
         private Set<TopicPartition> assignedPartitions;
 
-        private FetchManagerMetrics(Metrics metrics, String metricGrpPrefix) {
+        private FetchManagerMetrics(Metrics metrics, FetcherMetricsRegistry metricsRegistry) {
             this.metrics = metrics;
-            this.metricGrpName = metricGrpPrefix + "-fetch-manager-metrics";
+            this.metricsRegistry = metricsRegistry;
 
             this.bytesFetched = metrics.sensor("bytes-fetched");
-            this.bytesFetched.add(metrics.metricName("fetch-size-avg",
-                this.metricGrpName,
-                "The average number of bytes fetched per request"), new Avg());
-            this.bytesFetched.add(metrics.metricName("fetch-size-max",
-                this.metricGrpName,
-                "The maximum number of bytes fetched per request"), new Max());
-            this.bytesFetched.add(metrics.metricName("bytes-consumed-rate",
-                this.metricGrpName,
-                "The average number of bytes consumed per second"), new Rate());
+            this.bytesFetched.add(metrics.metricInstance(metricsRegistry.fetchSizeAvg), new Avg());
+            this.bytesFetched.add(metrics.metricInstance(metricsRegistry.fetchSizeMax), new Max());
+            this.bytesFetched.add(metrics.metricInstance(metricsRegistry.bytesConsumedRate), new Rate());
 
             this.recordsFetched = metrics.sensor("records-fetched");
-            this.recordsFetched.add(metrics.metricName("records-per-request-avg",
-                this.metricGrpName,
-                "The average number of records in each request"), new Avg());
-            this.recordsFetched.add(metrics.metricName("records-consumed-rate",
-                this.metricGrpName,
-                "The average number of records consumed per second"), new Rate());
+            this.recordsFetched.add(metrics.metricInstance(metricsRegistry.recordsPerRequestAvg), new Avg());
+            this.recordsFetched.add(metrics.metricInstance(metricsRegistry.recordsConsumedRate), new Rate());
 
             this.fetchLatency = metrics.sensor("fetch-latency");
-            this.fetchLatency.add(metrics.metricName("fetch-latency-avg",
-                this.metricGrpName,
-                "The average time taken for a fetch request."), new Avg());
-            this.fetchLatency.add(metrics.metricName("fetch-latency-max",
-                this.metricGrpName,
-                "The max time taken for any fetch request."), new Max());
-            this.fetchLatency.add(metrics.metricName("fetch-rate",
-                this.metricGrpName,
-                "The number of fetch requests per second."), new Rate(new Count()));
+            this.fetchLatency.add(metrics.metricInstance(metricsRegistry.fetchLatencyAvg), new Avg());
+            this.fetchLatency.add(metrics.metricInstance(metricsRegistry.fetchLatencyMax), new Max());
+            this.fetchLatency.add(metrics.metricInstance(metricsRegistry.fetchRequestRate), new Rate(new Count()));
 
             this.recordsFetchLag = metrics.sensor("records-lag");
-            this.recordsFetchLag.add(metrics.metricName("records-lag-max",
-                this.metricGrpName,
-                "The maximum lag in terms of number of records for any partition in this window"), new Max());
-
-            this.fetchThrottleTimeSensor = metrics.sensor("fetch-throttle-time");
-            this.fetchThrottleTimeSensor.add(metrics.metricName("fetch-throttle-time-avg",
-                                                         this.metricGrpName,
-                                                         "The average throttle time in ms"), new Avg());
-
-            this.fetchThrottleTimeSensor.add(metrics.metricName("fetch-throttle-time-max",
-                                                         this.metricGrpName,
-                                                         "The maximum throttle time in ms"), new Max());
+            this.recordsFetchLag.add(metrics.metricInstance(metricsRegistry.recordsLagMax), new Max());
         }
 
         private void recordTopicFetchMetrics(String topic, int bytes, int records) {
@@ -1072,17 +1231,11 @@ public class Fetcher<K, V> implements SubscriptionState.Listener, Closeable {
                 Map<String, String> metricTags = Collections.singletonMap("topic", topic.replace('.', '_'));
 
                 bytesFetched = this.metrics.sensor(name);
-                bytesFetched.add(this.metrics.metricName("fetch-size-avg",
-                        this.metricGrpName,
-                        "The average number of bytes fetched per request for topic " + topic,
+                bytesFetched.add(this.metrics.metricInstance(metricsRegistry.topicFetchSizeAvg,
                         metricTags), new Avg());
-                bytesFetched.add(this.metrics.metricName("fetch-size-max",
-                        this.metricGrpName,
-                        "The maximum number of bytes fetched per request for topic " + topic,
+                bytesFetched.add(this.metrics.metricInstance(metricsRegistry.topicFetchSizeMax,
                         metricTags), new Max());
-                bytesFetched.add(this.metrics.metricName("bytes-consumed-rate",
-                        this.metricGrpName,
-                        "The average number of bytes consumed per second for topic " + topic,
+                bytesFetched.add(this.metrics.metricInstance(metricsRegistry.topicBytesConsumedRate,
                         metricTags), new Rate());
             }
             bytesFetched.record(bytes);
@@ -1095,13 +1248,9 @@ public class Fetcher<K, V> implements SubscriptionState.Listener, Closeable {
                 metricTags.put("topic", topic.replace('.', '_'));
 
                 recordsFetched = this.metrics.sensor(name);
-                recordsFetched.add(this.metrics.metricName("records-per-request-avg",
-                        this.metricGrpName,
-                        "The average number of records in each request for topic " + topic,
+                recordsFetched.add(this.metrics.metricInstance(metricsRegistry.topicRecordsPerRequestAvg,
                         metricTags), new Avg());
-                recordsFetched.add(this.metrics.metricName("records-consumed-rate",
-                        this.metricGrpName,
-                        "The average number of records consumed per second for topic " + topic,
+                recordsFetched.add(this.metrics.metricInstance(metricsRegistry.topicRecordsConsumedRate,
                         metricTags), new Rate());
             }
             recordsFetched.record(records);
@@ -1124,14 +1273,15 @@ public class Fetcher<K, V> implements SubscriptionState.Listener, Closeable {
             Sensor recordsLag = this.metrics.getSensor(name);
             if (recordsLag == null) {
                 recordsLag = this.metrics.sensor(name);
-                recordsLag.add(this.metrics.metricName(name, this.metricGrpName, "The latest lag of the partition"),
-                               new Value());
+                recordsLag.add(this.metrics.metricName(name,
+                        metricsRegistry.partitionRecordsLag.group(),
+                        metricsRegistry.partitionRecordsLag.description()), new Value());
                 recordsLag.add(this.metrics.metricName(name + "-max",
-                        this.metricGrpName,
-                        "The max lag of the partition"), new Max());
+                        metricsRegistry.partitionRecordsLagMax.group(),
+                        metricsRegistry.partitionRecordsLagMax.description()), new Max());
                 recordsLag.add(this.metrics.metricName(name + "-avg",
-                        this.metricGrpName,
-                        "The average lag of the partition"), new Avg());
+                        metricsRegistry.partitionRecordsLagAvg.group(),
+                        metricsRegistry.partitionRecordsLagAvg.description()), new Avg());
             }
             recordsLag.record(lag);
         }
@@ -1145,6 +1295,7 @@ public class Fetcher<K, V> implements SubscriptionState.Listener, Closeable {
     public void close() {
         if (nextInLineRecords != null)
             nextInLineRecords.drain();
+        decompressionBufferSupplier.close();
     }
 
 }

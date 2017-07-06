@@ -17,12 +17,13 @@
 package com.ynet.belink.common.requests;
 
 import com.ynet.belink.common.Cluster;
-import  com.ynet.belink.common.Node;
-import  com.ynet.belink.common.PartitionInfo;
-import  com.ynet.belink.common.errors.InvalidMetadataException;
-import  com.ynet.belink.common.protocol.ApiKeys;
-import  com.ynet.belink.common.protocol.Errors;
-import  com.ynet.belink.common.protocol.types.Struct;
+import com.ynet.belink.common.Node;
+import com.ynet.belink.common.PartitionInfo;
+import com.ynet.belink.common.errors.InvalidMetadataException;
+import com.ynet.belink.common.protocol.ApiKeys;
+import com.ynet.belink.common.protocol.Errors;
+import com.ynet.belink.common.protocol.types.Struct;
+import com.ynet.belink.common.utils.Utils;
 
 import java.nio.ByteBuffer;
 import java.util.*;
@@ -74,6 +75,7 @@ public class MetadataResponse extends AbstractResponse {
     private static final String REPLICAS_KEY_NAME = "replicas";
     private static final String ISR_KEY_NAME = "isr";
 
+    private final int throttleTimeMs;
     private final Collection<Node> brokers;
     private final Node controller;
     private final List<TopicMetadata> topicMetadata;
@@ -83,6 +85,11 @@ public class MetadataResponse extends AbstractResponse {
      * Constructor for all versions.
      */
     public MetadataResponse(List<Node> brokers, String clusterId, int controllerId, List<TopicMetadata> topicMetadata) {
+        this(DEFAULT_THROTTLE_TIME, brokers, clusterId, controllerId, topicMetadata);
+    }
+
+    public MetadataResponse(int throttleTimeMs, List<Node> brokers, String clusterId, int controllerId, List<TopicMetadata> topicMetadata) {
+        this.throttleTimeMs = throttleTimeMs;
         this.brokers = brokers;
         this.controller = getControllerNode(controllerId, brokers);
         this.topicMetadata = topicMetadata;
@@ -90,6 +97,7 @@ public class MetadataResponse extends AbstractResponse {
     }
 
     public MetadataResponse(Struct struct) {
+        this.throttleTimeMs = struct.hasField(THROTTLE_TIME_KEY_NAME) ? struct.getInt(THROTTLE_TIME_KEY_NAME) : DEFAULT_THROTTLE_TIME;
         Map<Integer, Node> brokers = new HashMap<>();
         Object[] brokerStructs = (Object[]) struct.get(BROKERS_KEY_NAME);
         for (Object brokerStruct : brokerStructs) {
@@ -173,29 +181,10 @@ public class MetadataResponse extends AbstractResponse {
         return null;
     }
 
-    /**
-     * Get a snapshot of the cluster metadata from this response
-     * @return the cluster snapshot
-     */
-    public Cluster cluster() {
-        Set<String> internalTopics = new HashSet<>();
-        List<PartitionInfo> partitions = new ArrayList<>();
-        for (TopicMetadata metadata : topicMetadata) {
-            if (metadata.error == Errors.NONE) {
-                if (metadata.isInternal)
-                    internalTopics.add(metadata.topic);
-                for (PartitionMetadata partitionMetadata : metadata.partitionMetadata)
-                    partitions.add(new PartitionInfo(
-                            metadata.topic,
-                            partitionMetadata.partition,
-                            partitionMetadata.leader,
-                            partitionMetadata.replicas.toArray(new Node[0]),
-                            partitionMetadata.isr.toArray(new Node[0])));
-            }
-        }
-
-        return new Cluster(this.clusterId, this.brokers, partitions, topicsByError(Errors.TOPIC_AUTHORIZATION_FAILED), internalTopics);
+    public int throttleTimeMs() {
+        return throttleTimeMs;
     }
+
     /**
      * Get a map of the topics which had metadata errors
      * @return the map
@@ -242,6 +231,31 @@ public class MetadataResponse extends AbstractResponse {
             }
         }
         return invalidMetadataTopics;
+    }
+
+    /**
+     * Get a snapshot of the cluster metadata from this response
+     * @return the cluster snapshot
+     */
+    public Cluster cluster() {
+        Set<String> internalTopics = new HashSet<>();
+        List<PartitionInfo> partitions = new ArrayList<>();
+        for (TopicMetadata metadata : topicMetadata) {
+            if (metadata.error == Errors.NONE) {
+                if (metadata.isInternal)
+                    internalTopics.add(metadata.topic);
+                for (PartitionMetadata partitionMetadata : metadata.partitionMetadata)
+                    partitions.add(new PartitionInfo(
+                            metadata.topic,
+                            partitionMetadata.partition,
+                            partitionMetadata.leader,
+                            partitionMetadata.replicas.toArray(new Node[0]),
+                            partitionMetadata.isr.toArray(new Node[0])));
+            }
+        }
+
+        return new Cluster(this.clusterId, this.brokers, partitions, topicsByError(Errors.TOPIC_AUTHORIZATION_FAILED),
+                internalTopics, this.controller);
     }
 
     /**
@@ -353,11 +367,22 @@ public class MetadataResponse extends AbstractResponse {
             return isr;
         }
 
+        @Override
+        public String toString() {
+            return "(type=PartitionMetadata," +
+                    ", error=" + error +
+                    ", partition=" + partition +
+                    ", leader=" + leader +
+                    ", replicas=" + Utils.join(replicas, ",") +
+                    ", isr=" + Utils.join(isr, ",") + ')';
+        }
     }
 
     @Override
     protected Struct toStruct(short version) {
         Struct struct = new Struct(ApiKeys.METADATA.responseSchema(version));
+        if (struct.hasField(THROTTLE_TIME_KEY_NAME))
+            struct.set(THROTTLE_TIME_KEY_NAME, throttleTimeMs);
         List<Struct> brokerArray = new ArrayList<>();
         for (Node node : brokers) {
             Struct broker = struct.instance(BROKERS_KEY_NAME);

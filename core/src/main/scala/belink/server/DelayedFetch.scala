@@ -20,6 +20,7 @@ package belink.server
 import com.ynet.belink.common.TopicPartition
 import com.ynet.belink.common.errors.{NotLeaderForPartitionException, UnknownTopicOrPartitionException}
 import com.ynet.belink.common.requests.FetchRequest.PartitionData
+import com.ynet.belink.common.requests.IsolationLevel
 
 import scala.collection._
 
@@ -54,6 +55,7 @@ class DelayedFetch(delayMs: Long,
                    fetchMetadata: FetchMetadata,
                    replicaManager: ReplicaManager,
                    quota: ReplicaQuota,
+                   isolationLevel: IsolationLevel,
                    responseCallback: Seq[(TopicPartition, FetchPartitionData)] => Unit)
   extends DelayedOperation(delayMs) {
 
@@ -143,8 +145,8 @@ class DelayedFetch(delayMs: Long,
       fetchMaxBytes = fetchMetadata.fetchMaxBytes,
       hardMaxBytesLimit = fetchMetadata.hardMaxBytesLimit,
       readPartitionInfo = fetchMetadata.fetchPartitionStatus.map { case (tp, status) => tp -> status.fetchInfo },
-      quota = quota
-    )
+      quota = quota,
+      isolationLevel = isolationLevel)
 
     val fetchPartitionData = logReadResults.map { case (tp, result) =>
       tp -> FetchPartitionData(result.error, result.hw, result.leaderLogStartOffset, result.info.records)

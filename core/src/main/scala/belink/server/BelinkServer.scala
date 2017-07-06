@@ -76,6 +76,8 @@ class BelinkServer(val config: BelinkConfig, time: Time = Time.SYSTEM,
 
   var logManager: LogManager = null
 
+  var quotaManagers: QuotaFactory.QuotaManagers = null
+
   var replicaManager: ReplicaManager = null
 
   var blockChainManager: BlockChainManager = null
@@ -83,6 +85,10 @@ class BelinkServer(val config: BelinkConfig, time: Time = Time.SYSTEM,
   var credentialProvider: CredentialProvider = null
 
   var authorizer: Option[Authorizer] = None
+
+  private var _brokerTopicStats: BrokerTopicStats = null
+
+  private[belink] def brokerTopicStats = _brokerTopicStats
 
   def startup(): Unit = {
     try {
@@ -102,14 +108,18 @@ class BelinkServer(val config: BelinkConfig, time: Time = Time.SYSTEM,
         val reporters = config.getConfiguredInstances(BelinkConfig.MetricReporterClassesProp, classOf[MetricsReporter],
           Map.empty[String, AnyRef].asJava)
 
+        /* register broker metrics */
+        _brokerTopicStats = new BrokerTopicStats
+
         metrics = new Metrics(metricConfig, reporters, time, true)
+        quotaManagers = QuotaFactory.instantiate(config, metrics, time)
 
         credentialProvider = new CredentialProvider(config.saslEnabledMechanisms)
 
         belinkScheduler.startup()
 
         /* start log manager */
-        logManager = LogManager(config, belinkScheduler, time)
+        logManager = LogManager(config, belinkScheduler, time, brokerTopicStats)
         logManager.startup()
 
         socketServer = new SocketServer(config, metrics, time, credentialProvider)
@@ -127,7 +137,7 @@ class BelinkServer(val config: BelinkConfig, time: Time = Time.SYSTEM,
         }
 
         /* start processing requests */
-        apis = new BelinkApis(socketServer.requestChannel, replicaManager, authorizer)
+        apis = new BelinkApis(socketServer.requestChannel, replicaManager, authorizer, config, quotaManagers, time)
         requestHandlerPool = new BelinkRequestHandlerPool(socketServer.requestChannel, apis, time,
           config.numIoThreads)
 

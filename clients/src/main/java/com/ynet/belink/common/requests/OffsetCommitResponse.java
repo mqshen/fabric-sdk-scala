@@ -16,11 +16,11 @@
  */
 package com.ynet.belink.common.requests;
 
-import  com.ynet.belink.common.TopicPartition;
-import  com.ynet.belink.common.protocol.ApiKeys;
-import  com.ynet.belink.common.protocol.Errors;
-import  com.ynet.belink.common.protocol.types.Struct;
-import  com.ynet.belink.common.utils.CollectionUtils;
+import com.ynet.belink.common.TopicPartition;
+import com.ynet.belink.common.protocol.ApiKeys;
+import com.ynet.belink.common.protocol.Errors;
+import com.ynet.belink.common.protocol.types.Struct;
+import com.ynet.belink.common.utils.CollectionUtils;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -44,10 +44,11 @@ public class OffsetCommitResponse extends AbstractResponse {
      * Possible error codes:
      *
      * UNKNOWN_TOPIC_OR_PARTITION (3)
+     * REQUEST_TIMED_OUT (7)
      * OFFSET_METADATA_TOO_LARGE (12)
-     * GROUP_LOAD_IN_PROGRESS (14)
+     * COORDINATOR_LOAD_IN_PROGRESS (14)
      * GROUP_COORDINATOR_NOT_AVAILABLE (15)
-     * NOT_COORDINATOR_FOR_GROUP (16)
+     * NOT_COORDINATOR (16)
      * ILLEGAL_GENERATION (22)
      * UNKNOWN_MEMBER_ID (25)
      * REBALANCE_IN_PROGRESS (27)
@@ -57,12 +58,19 @@ public class OffsetCommitResponse extends AbstractResponse {
      */
 
     private final Map<TopicPartition, Errors> responseData;
+    private final int throttleTimeMs;
 
     public OffsetCommitResponse(Map<TopicPartition, Errors> responseData) {
+        this(DEFAULT_THROTTLE_TIME, responseData);
+    }
+
+    public OffsetCommitResponse(int throttleTimeMs, Map<TopicPartition, Errors> responseData) {
+        this.throttleTimeMs = throttleTimeMs;
         this.responseData = responseData;
     }
 
     public OffsetCommitResponse(Struct struct) {
+        this.throttleTimeMs = struct.hasField(THROTTLE_TIME_KEY_NAME) ? struct.getInt(THROTTLE_TIME_KEY_NAME) : DEFAULT_THROTTLE_TIME;
         responseData = new HashMap<>();
         for (Object topicResponseObj : struct.getArray(RESPONSES_KEY_NAME)) {
             Struct topicResponse = (Struct) topicResponseObj;
@@ -79,6 +87,8 @@ public class OffsetCommitResponse extends AbstractResponse {
     @Override
     public Struct toStruct(short version) {
         Struct struct = new Struct(ApiKeys.OFFSET_COMMIT.responseSchema(version));
+        if (struct.hasField(THROTTLE_TIME_KEY_NAME))
+            struct.set(THROTTLE_TIME_KEY_NAME, throttleTimeMs);
 
         Map<String, Map<Integer, Errors>> topicsData = CollectionUtils.groupDataByTopic(responseData);
         List<Struct> topicArray = new ArrayList<>();
@@ -98,6 +108,10 @@ public class OffsetCommitResponse extends AbstractResponse {
         struct.set(RESPONSES_KEY_NAME, topicArray.toArray());
 
         return struct;
+    }
+
+    public int throttleTimeMs() {
+        return throttleTimeMs;
     }
 
     public Map<TopicPartition, Errors> responseData() {

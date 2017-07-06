@@ -17,10 +17,11 @@
 package com.ynet.belink.clients.consumer.internals;
 
 import com.ynet.belink.clients.consumer.ConsumerRebalanceListener;
-import  com.ynet.belink.clients.consumer.OffsetAndMetadata;
-import  com.ynet.belink.clients.consumer.OffsetResetStrategy;
-import  com.ynet.belink.common.TopicPartition;
-import  com.ynet.belink.common.internals.PartitionStates;
+import com.ynet.belink.clients.consumer.OffsetAndMetadata;
+import com.ynet.belink.clients.consumer.OffsetResetStrategy;
+import com.ynet.belink.common.TopicPartition;
+import com.ynet.belink.common.internals.PartitionStates;
+import com.ynet.belink.common.requests.IsolationLevel;
 
 import java.util.*;
 import java.util.regex.Pattern;
@@ -311,13 +312,20 @@ public class SubscriptionState {
         return assignedState(tp).position;
     }
 
-    public Long partitionLag(TopicPartition tp) {
+    public Long partitionLag(TopicPartition tp, IsolationLevel isolationLevel) {
         TopicPartitionState topicPartitionState = assignedState(tp);
-        return topicPartitionState.highWatermark == null ? null : topicPartitionState.highWatermark - topicPartitionState.position;
+        if (isolationLevel == IsolationLevel.READ_COMMITTED)
+            return topicPartitionState.lastStableOffset == null ? null : topicPartitionState.lastStableOffset - topicPartitionState.position;
+        else
+            return topicPartitionState.highWatermark == null ? null : topicPartitionState.highWatermark - topicPartitionState.position;
     }
 
     public void updateHighWatermark(TopicPartition tp, long highWatermark) {
         assignedState(tp).highWatermark = highWatermark;
+    }
+
+    public void updateLastStableOffset(TopicPartition tp, long lastStableOffset) {
+        assignedState(tp).lastStableOffset = lastStableOffset;
     }
 
     public Map<TopicPartition, OffsetAndMetadata> allConsumed() {
@@ -420,6 +428,7 @@ public class SubscriptionState {
     private static class TopicPartitionState {
         private Long position; // last consumed position
         private Long highWatermark; // the high watermark from last fetch
+        private Long lastStableOffset;
         private OffsetAndMetadata committed;  // last committed position
         private boolean paused;  // whether this partition has been paused by the user
         private OffsetResetStrategy resetStrategy;  // the strategy to use if the offset needs resetting
@@ -428,6 +437,7 @@ public class SubscriptionState {
             this.paused = false;
             this.position = null;
             this.highWatermark = null;
+            this.lastStableOffset = null;
             this.committed = null;
             this.resetStrategy = null;
         }

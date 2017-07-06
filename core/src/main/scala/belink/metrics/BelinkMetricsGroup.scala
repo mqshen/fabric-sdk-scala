@@ -5,13 +5,20 @@ import javax.management.ObjectName
 
 import belink.utils.Logging
 import com.yammer.metrics.Metrics
-import com.yammer.metrics.core.MetricName
+import com.yammer.metrics.core.{Gauge, MetricName}
 
 /**
   * Created by goldratio on 29/06/2017.
   */
 trait BelinkMetricsGroup extends Logging {
 
+  /**
+    * Creates a new MetricName object for gauges, meters, etc. created for this
+    * metrics group.
+    * @param name Descriptive name of the metric.
+    * @param tags Additional attributes which mBean will have.
+    * @return Sanitized metric name object.
+    */
   private def metricName(name: String, tags: scala.collection.Map[String, String] = Map.empty) = {
     val klass = this.getClass
     val pkg = if (klass.getPackage == null) "" else klass.getPackage.getName
@@ -22,6 +29,7 @@ trait BelinkMetricsGroup extends Logging {
 
     explicitMetricName(pkg, simpleName, name, metricTags)
   }
+
 
   private def explicitMetricName(group: String, typeName: String, name: String, tags: scala.collection.Map[String, String] = Map.empty) = {
     val nameBuilder: StringBuilder = new StringBuilder
@@ -48,8 +56,20 @@ trait BelinkMetricsGroup extends Logging {
     new MetricName(group, typeName, name, scope, nameBuilder.toString())
   }
 
+  def newGauge[T](name: String, metric: Gauge[T], tags: scala.collection.Map[String, String] = Map.empty) =
+    Metrics.defaultRegistry().newGauge(metricName(name, tags), metric)
+
+  def newMeter(name: String, eventType: String, timeUnit: TimeUnit, tags: scala.collection.Map[String, String] = Map.empty) =
+    Metrics.defaultRegistry().newMeter(metricName(name, tags), eventType, timeUnit)
+
+  def newHistogram(name: String, biased: Boolean = true, tags: scala.collection.Map[String, String] = Map.empty) =
+    Metrics.defaultRegistry().newHistogram(metricName(name, tags), biased)
+
   def newTimer(name: String, durationUnit: TimeUnit, rateUnit: TimeUnit, tags: scala.collection.Map[String, String] = Map.empty) =
     Metrics.defaultRegistry().newTimer(metricName(name, tags), durationUnit, rateUnit)
+
+  def removeMetric(name: String, tags: scala.collection.Map[String, String] = Map.empty) =
+    Metrics.defaultRegistry().removeMetric(metricName(name, tags))
 
 }
 

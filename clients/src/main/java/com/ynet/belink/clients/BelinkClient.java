@@ -3,43 +3,150 @@ package com.ynet.belink.clients;
 import com.ynet.belink.common.Node;
 import com.ynet.belink.common.requests.AbstractRequest;
 
+import java.io.Closeable;
 import java.util.List;
 
 /**
  * Created by goldratio on 27/06/2017.
  */
-public interface BelinkClient {
-    boolean ready(Node node, long now);
-
-    void close(String nodeId);
-
-    long connectionDelay(Node node, long now);
-
-    boolean connectionFailed(Node node);
-
+public interface BelinkClient extends Closeable {
+    /**
+     * Check if we are currently ready to send another request to the given node but don't attempt to connect if we
+     * aren't.
+     *
+     * @param node The node to check
+     * @param now The current timestamp
+     */
     boolean isReady(Node node, long now);
 
+    /**
+     * Initiate a connection to the given node (if necessary), and return true if already connected. The readiness of a
+     * node will change only when poll is invoked.
+     *
+     * @param node The node to connect to.
+     * @param now The current time
+     * @return true iff we are ready to immediately initiate the sending of another request to the given node.
+     */
+    boolean ready(Node node, long now);
+
+    /**
+     * Returns the number of milliseconds to wait, based on the connection state, before attempting to send data. When
+     * disconnected, this respects the reconnect backoff time. When connecting or connected, this handles slow/stalled
+     * connections.
+     *
+     * @param node The node to check
+     * @param now The current timestamp
+     * @return The number of milliseconds to wait.
+     */
+    long connectionDelay(Node node, long now);
+
+    /**
+     * Check if the connection of the node has failed, based on the connection state. Such connection failure are
+     * usually transient and can be resumed in the next {@link #ready(com.ynet.belink.common.Node, long)} }
+     * call, but there are cases where transient failures needs to be caught and re-acted upon.
+     *
+     * @param node the node to check
+     * @return true iff the connection has failed and the node is disconnected
+     */
+    boolean connectionFailed(Node node);
+
+    /**
+     * Queue up the given request for sending. Requests can only be sent on ready connections.
+     * @param request The request
+     * @param now The current timestamp
+     */
     void send(ClientRequest request, long now);
 
+    /**
+     * Do actual reads and writes from sockets.
+     *
+     * @param timeout The maximum amount of time to wait for responses in ms, must be non-negative. The implementation
+     *                is free to use a lower value if appropriate (common reasons for this are a lower request or
+     *                metadata update timeout)
+     * @param now The current time in ms
+     * @throws IllegalStateException If a request is sent to an unready node
+     */
     List<ClientResponse> poll(long timeout, long now);
 
-    int inFlightRequestCount();
+    /**
+     * Diconnects the connection to a particular node, if there is one.
+     * Any pending ClientRequests for this connection will receive disconnections.
+     *
+     * @param nodeId The id of the node
+     */
+    void disconnect(String nodeId);
 
-    boolean hasInFlightRequests();
+    /**
+     * Closes the connection to a particular node (if there is one).
+     * All requests on the connection will be cleared.  ClientRequest callbacks will not be invoked
+     * for the cleared requests, nor will they be returned from poll().
+     *
+     * @param nodeId The id of the node
+     */
+    void close(String nodeId);
 
-    int inFlightRequestCount(String node);
-
-    boolean hasInFlightRequests(String node);
-
-    void wakeup();
-
-    void close();
-
+    /**
+     * Choose the node with the fewest outstanding requests. This method will prefer a node with an existing connection,
+     * but will potentially choose a node for which we don't yet have a connection if all existing connections are in
+     * use.
+     *
+     * @param now The current time in ms
+     * @return The node with the fewest in-flight requests.
+     */
     Node leastLoadedNode(long now);
 
-    ClientRequest newClientRequest(String nodeId, AbstractRequest.Builder<?> requestBuilder, long createdTimeMs,
-                                   boolean expectResponse);
+    /**
+     * The number of currently in-flight requests for which we have not yet returned a response
+     */
+    int inFlightRequestCount();
 
+    /**
+     * Return true if there is at least one in-flight request and false otherwise.
+     */
+    boolean hasInFlightRequests();
+
+    /**
+     * Get the total in-flight requests for a particular node
+     *
+     * @param nodeId The id of the node
+     */
+    int inFlightRequestCount(String nodeId);
+
+    /**
+     * Return true if there is at least one in-flight request for a particular node and false otherwise.
+     */
+    boolean hasInFlightRequests(String nodeId);
+
+    /**
+     * Return true if there is at least one node with connection in ready state and false otherwise.
+     */
+    boolean hasReadyNodes();
+
+    /**
+     * Wake up the client if it is currently blocked waiting for I/O
+     */
+    void wakeup();
+
+    /**
+     * Create a new ClientRequest.
+     *
+     * @param nodeId the node to send to
+     * @param requestBuilder the request builder to use
+     * @param createdTimeMs the time in milliseconds to use as the creation time of the request
+     * @param expectResponse true iff we expect a response
+     */
+    ClientRequest newClientRequest(String nodeId, AbstractRequest.Builder<?> requestBuilder,
+                                   long createdTimeMs, boolean expectResponse);
+
+    /**
+     * Create a new ClientRequest.
+     *
+     * @param nodeId the node to send to
+     * @param requestBuilder the request builder to use
+     * @param createdTimeMs the time in milliseconds to use as the creation time of the request
+     * @param expectResponse true iff we expect a response
+     * @param callback the callback to invoke when we get a response
+     */
     ClientRequest newClientRequest(String nodeId, AbstractRequest.Builder<?> requestBuilder, long createdTimeMs,
                                    boolean expectResponse, RequestCompletionHandler callback);
 }

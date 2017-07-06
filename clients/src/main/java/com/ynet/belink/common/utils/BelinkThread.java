@@ -10,6 +10,14 @@ public class BelinkThread extends Thread {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
+    public static BelinkThread daemon(final String name, Runnable runnable) {
+        return new BelinkThread(name, runnable, true);
+    }
+
+    public static BelinkThread nonDaemon(final String name, Runnable runnable) {
+        return new BelinkThread(name, runnable, false);
+    }
+
     public BelinkThread(final String name, boolean daemon) {
         super(name);
         configureThread(name, daemon);
@@ -22,9 +30,9 @@ public class BelinkThread extends Thread {
 
     private void configureThread(final String name, boolean daemon) {
         setDaemon(daemon);
-        setUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
+        setUncaughtExceptionHandler(new UncaughtExceptionHandler() {
             public void uncaughtException(Thread t, Throwable e) {
-                log.error("Uncaught exception in " + name + ": ", e);
+                log.error("Uncaught exception in thread '{}':", name, e);
             }
         });
     }

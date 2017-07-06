@@ -5,11 +5,13 @@ import belink.network.RequestChannel
 import belink.network.RequestChannel.Session
 import belink.security.auth
 import belink.security.auth._
+import belink.server.QuotaFactory.QuotaManagers
 import belink.utils.Logging
 import com.ynet.belink.common.TopicPartition
-import com.ynet.belink.common.protocol.{ApiKeys, Errors}
+import com.ynet.belink.common.protocol.{ApiKeys, Errors, Protocol}
 import com.ynet.belink.common.requests.ProduceResponse.PartitionResponse
-import com.ynet.belink.common.requests.{FetchRequest, ProduceRequest, ProduceResponse}
+import com.ynet.belink.common.requests.{ApiVersionsResponse, FetchRequest, ProduceRequest, ProduceResponse}
+import com.ynet.belink.common.utils.Time
 
 import scala.collection.JavaConverters._
 import scala.collection.{Map, immutable}
@@ -18,7 +20,10 @@ import scala.collection.{Map, immutable}
   */
 class BelinkApis(val requestChannel: RequestChannel,
                  val replicaManager: ReplicaManager,
-                 val authorizer: Option[Authorizer]) extends Logging {
+                 val authorizer: Option[Authorizer],
+                 val config: BelinkConfig,
+                 val quotas: QuotaManagers,
+                 time: Time) extends Logging {
 
   def handle(request: RequestChannel.Request): Unit = {
     try {
@@ -26,6 +31,8 @@ class BelinkApis(val requestChannel: RequestChannel,
         format(request.requestDesc(true), request.connectionId, request.securityProtocol, request.session.principal))
       ApiKeys.forId(request.requestId) match {
         case ApiKeys.PRODUCE => handleProducerRequest(request)
+        case ApiKeys.API_VERSIONS => handleApiVersionsRequest(request)
+        case x => println(s"go for go :$x")
       }
     }
   }
@@ -110,6 +117,34 @@ class BelinkApis(val requestChannel: RequestChannel,
     // hence we clear its data here inorder to let GC re-claim its memory since it is already appended to log
     produceRequest.clearPartitionRecords()
 
+  }
+
+  def handleApiVersionsRequest(request: RequestChannel.Request) {
+    // Note that broker returns its full list of supported ApiKeys and versions regardless of current
+    // authentication state (e.g., before SASL authentication on an SASL listener, do note that no
+    // Kafka protocol requests may take place on a SSL listener before the SSL handshake is finished).
+    // If this is considered to leak information about the broker version a workaround is to use SSL
+    // with client authentication which is performed at an earlier stage of the connection where the
+    // ApiVersionRequest is not available.
+    def sendResponseCallback(requestThrottleMs: Int) {
+      val responseSend =
+        if (Protocol.apiVersionSupported(ApiKeys.API_VERSIONS.id, request.header.apiVersion))
+          ApiVersionsResponse.apiVersionsResponse(requestThrottleMs, config.interBrokerProtocolVersion.messageFormatVersion).toSend(request.connectionId, request.header)
+        else ApiVersionsResponse.unsupportedVersionSend(request.connectionId, request.header)
+      requestChannel.sendResponse(RequestChannel.Response(request, responseSend))
+    }
+    sendResponseMaybeThrottle(request, request.header.clientId, sendResponseCallback)
+  }
+
+  private def sendResponseMaybeThrottle(request: RequestChannel.Request, clientId: String, sendResponseCallback: Int => Unit) {
+
+    if (request.apiRemoteCompleteTimeNanos == -1) {
+      // When this callback is triggered, the remote API call has completed
+      request.apiRemoteCompleteTimeNanos = time.nanoseconds
+    }
+    quotas.request.maybeRecordAndThrottle(request.session.sanitizedUser, clientId,
+      request.requestThreadTimeNanos, sendResponseCallback,
+      callback => request.recordNetworkThreadTimeCallback = Some(callback))
   }
 
   private def authorize(session: Session, operation: Operation, resource: Resource): Boolean =
