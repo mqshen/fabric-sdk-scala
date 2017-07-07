@@ -235,7 +235,7 @@ class BelinkApis(val requestChannel: RequestChannel,
       AdminUtils.createTopic(topic, numPartitions, replicationFactor, properties, RackAwareMode.Safe)
       info("Auto creation of topic %s with %d partitions and replication factor %d is successful"
         .format(topic, numPartitions, replicationFactor))
-      metadataCache.geto
+      metadataCache.addPartitionInfo(topic, numPartitions)
       new MetadataResponse.TopicMetadata(Errors.LEADER_NOT_AVAILABLE, topic, isInternal(topic),
         java.util.Collections.emptyList())
     } catch {

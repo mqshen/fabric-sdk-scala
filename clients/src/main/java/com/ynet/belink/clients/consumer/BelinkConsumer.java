@@ -579,6 +579,7 @@ public class BelinkConsumer<K, V> implements Consumer<K, V> {
      */
     private Map<TopicPartition, List<ConsumerRecord<K, V>>> pollOnce(long timeout) {
         client.maybeTriggerWakeup();
+        coordinator.poll(time.milliseconds(), timeout);
 
         // fetch positions if we have partitions we're subscribed to that we
         // don't know the offset for

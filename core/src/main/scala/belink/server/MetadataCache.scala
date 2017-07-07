@@ -154,6 +154,13 @@ class MetadataCache(brokerId: Int) extends Logging {
     }
   }
 
+  def addPartitionInfo(topic: String,
+                       partitionId: Int) {
+    inWriteLock(partitionMetadataLock) {
+      val infos = cache.getOrElseUpdate(topic, mutable.Map())
+    }
+  }
+
   def getPartitionInfo(topic: String, partitionId: Int): Option[PartitionStateInfo] = {
     inReadLock(partitionMetadataLock) {
       cache.get(topic).flatMap(_.get(partitionId))

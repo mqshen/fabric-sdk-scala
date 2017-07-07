@@ -24,9 +24,11 @@ object BelinkConsumerExample {
     props.put("value.deserializer", "com.ynet.belink.common.serialization.StringDeserializer")
 
     val consumer = new BelinkConsumer[String, String](props)
-    consumer.subscribe(Seq("data-log1"))
-    consumer.poll(Long.MaxValue).asScala.foreach { record =>
-      println(s"test for test:$record")
+    consumer.subscribe(Seq("data-log3"))
+    while (true) {
+      consumer.poll(Long.MaxValue).asScala.foreach { record =>
+        println(s"test for test:$record")
+      }
     }
   }
 

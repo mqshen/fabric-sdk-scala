@@ -781,7 +781,8 @@ public class NetworkClient implements BelinkClient {
 
         @Override
         public boolean isUpdateDue(long now) {
-            return !this.metadataFetchInProgress && this.metadata.timeToNextUpdate(now) == 0;
+            long temp = this.metadata.timeToNextUpdate(now);
+            return !this.metadataFetchInProgress && temp == 0;
         }
 
         @Override
