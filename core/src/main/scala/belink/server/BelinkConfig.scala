@@ -4,7 +4,8 @@ import java.util.Properties
 
 import belink.api.ApiVersion
 import belink.cluster.EndPoint
-import belink.message.{Message, MessageSet}
+import belink.coordinator.group.OffsetConfig
+import belink.message.{CompressionCodec, Message, MessageSet}
 import belink.utils.CoreUtils
 import com.ynet.belink.clients.CommonClientConfigs
 import com.ynet.belink.common.config.{AbstractConfig, ConfigDef, ConfigException, SaslConfigs}
@@ -18,14 +19,16 @@ import scala.collection.Map
   * Created by goldratio on 27/06/2017.
   */
 object Defaults {
+  val BrokerId = -1
+
   val SocketSendBufferBytes: Int = 100 * 1024
   val SocketReceiveBufferBytes: Int = 100 * 1024
   val SocketRequestMaxBytes: Int = 100 * 1024 * 1024
 
-
   val MaxConnectionsPerIp: Int = Int.MaxValue
   val MaxConnectionsPerIpOverrides: String = ""
   val ConnectionsMaxIdleMs = 10 * 60 * 1000L
+  val RequestTimeoutMs = 30000
   val QueuedMaxRequests = 500
 
   val NumIoThreads = 8
@@ -96,6 +99,20 @@ object Defaults {
   val SaslKerberosTicketRenewJitter = SaslConfigs.DEFAULT_KERBEROS_TICKET_RENEW_JITTER
   val SaslKerberosMinTimeBeforeRelogin = SaslConfigs.DEFAULT_KERBEROS_MIN_TIME_BEFORE_RELOGIN
   val SaslKerberosPrincipalToLocalRules = SaslConfigs.DEFAULT_SASL_KERBEROS_PRINCIPAL_TO_LOCAL_RULES
+
+
+  /** ********* Offset management configuration ***********/
+  val OffsetMetadataMaxSize = OffsetConfig.DefaultMaxMetadataSize
+  val OffsetsLoadBufferSize = OffsetConfig.DefaultLoadBufferSize
+  val OffsetsTopicReplicationFactor = OffsetConfig.DefaultOffsetsTopicReplicationFactor
+  val OffsetsTopicPartitions: Int = OffsetConfig.DefaultOffsetsTopicNumPartitions
+  val OffsetsTopicSegmentBytes: Int = OffsetConfig.DefaultOffsetsTopicSegmentBytes
+  val OffsetsTopicCompressionCodec: Int = OffsetConfig.DefaultOffsetsTopicCompressionCodec.codec
+  val OffsetsRetentionMinutes: Int = 24 * 60
+  val OffsetsRetentionCheckIntervalMs: Long = OffsetConfig.DefaultOffsetsRetentionCheckIntervalMs
+  val OffsetCommitTimeoutMs = OffsetConfig.DefaultOffsetCommitTimeoutMs
+  val OffsetCommitRequiredAcks = OffsetConfig.DefaultOffsetCommitRequiredAcks
+
   /** ********* Quota Configuration ***********/
   val ProducerQuotaBytesPerSecondDefault = ClientQuotaManagerConfig.QuotaBytesPerSecondDefault
   val ConsumerQuotaBytesPerSecondDefault = ClientQuotaManagerConfig.QuotaBytesPerSecondDefault
@@ -103,6 +120,11 @@ object Defaults {
   val QuotaWindowSizeSeconds: Int = ClientQuotaManagerConfig.DefaultQuotaWindowSizeSeconds
   val NumReplicationQuotaSamples: Int = ReplicationQuotaManagerConfig.DefaultNumQuotaSamples
   val ReplicationQuotaWindowSizeSeconds: Int = ReplicationQuotaManagerConfig.DefaultQuotaWindowSizeSeconds
+
+  /** ********* Replication configuration ***********/
+  val ControllerSocketTimeoutMs = RequestTimeoutMs
+  val ControllerMessageQueueSize = Int.MaxValue
+  val DefaultReplicationFactor = 1
 
   val AutoCreateTopicsEnable = true
 
@@ -116,6 +138,8 @@ object BelinkConfig {
 
   val MaxConnectionsPerIpProp = "max.connections.per.ip"
   val MaxConnectionsPerIpOverridesProp = "max.connections.per.ip.overrides"
+
+  val BrokerIdProp = "broker.id"
 
   /** ********* Kafka Metrics Configuration ***********/
   val MetricSampleWindowMsProp = CommonClientConfigs.METRICS_SAMPLE_WINDOW_MS_CONFIG
@@ -209,8 +233,29 @@ object BelinkConfig {
   val QuotaWindowSizeSecondsProp = "quota.window.size.seconds"
   val ReplicationQuotaWindowSizeSecondsProp = "replication.quota.window.size.seconds"
 
+  /** ********* Offset management configuration ***********/
+  val OffsetMetadataMaxSizeProp = "offset.metadata.max.bytes"
+  val OffsetsLoadBufferSizeProp = "offsets.load.buffer.size"
+  val OffsetsTopicReplicationFactorProp = "offsets.topic.replication.factor"
+  val OffsetsTopicPartitionsProp = "offsets.topic.num.partitions"
+  val OffsetsTopicSegmentBytesProp = "offsets.topic.segment.bytes"
+  val OffsetsTopicCompressionCodecProp = "offsets.topic.compression.codec"
+  val OffsetsRetentionMinutesProp = "offsets.retention.minutes"
+  val OffsetsRetentionCheckIntervalMsProp = "offsets.retention.check.interval.ms"
+  val OffsetCommitTimeoutMsProp = "offsets.commit.timeout.ms"
+  val OffsetCommitRequiredAcksProp = "offsets.commit.required.acks"
+
   /************* Authorizer Configuration ***********/
   val AuthorizerClassNameProp = "authorizer.class.name"
+  /** ********* Replication configuration ***********/
+  val ControllerSocketTimeoutMsProp = "controller.socket.timeout.ms"
+  val DefaultReplicationFactorProp = "default.replication.factor"
+
+
+  /** ********* General Configuration ***********/
+  val BrokerIdDoc = "The broker id for this server. If unset, a unique broker id will be generated." +
+    "To avoid conflicts between zookeeper generated broker id's and user configured broker id's, generated broker ids " +
+    "start from "
 
   val MaxConnectionsPerIpDoc = "The maximum number of connections we allow from each ip address"
   val MaxConnectionsPerIpOverridesDoc = "Per-ip or hostname overrides to the default maximum number of connections"
@@ -293,6 +338,24 @@ object BelinkConfig {
     " This is typically bumped after all brokers were upgraded to a new version.\n" +
     " Example of some valid values are: 0.8.0, 0.8.1, 0.8.1.1, 0.8.2, 0.8.2.0, 0.8.2.1, 0.9.0.0, 0.9.0.1 Check ApiVersion for the full list."
 
+  val ControllerSocketTimeoutMsDoc = "The socket timeout for controller-to-broker channels"
+  val DefaultReplicationFactorDoc = "default replication factors for automatically created topics"
+
+  /** ********* Offset management configuration ***********/
+  val OffsetMetadataMaxSizeDoc = "The maximum size for a metadata entry associated with an offset commit"
+  val OffsetsLoadBufferSizeDoc = "Batch size for reading from the offsets segments when loading offsets into the cache."
+  val OffsetsTopicReplicationFactorDoc = "The replication factor for the offsets topic (set higher to ensure availability). " +
+    "Internal topic creation will fail until the cluster size meets this replication factor requirement."
+  val OffsetsTopicPartitionsDoc = "The number of partitions for the offset commit topic (should not change after deployment)"
+  val OffsetsTopicSegmentBytesDoc = "The offsets topic segment bytes should be kept relatively small in order to facilitate faster log compaction and cache loads"
+  val OffsetsTopicCompressionCodecDoc = "Compression codec for the offsets topic - compression may be used to achieve \"atomic\" commits"
+  val OffsetsRetentionMinutesDoc = "Log retention window in minutes for offsets topic"
+  val OffsetsRetentionCheckIntervalMsDoc = "Frequency at which to check for stale offsets"
+  val OffsetCommitTimeoutMsDoc = "Offset commit will be delayed until all replicas for the offsets topic receive the commit " +
+    "or this timeout is reached. This is similar to the producer request timeout."
+  val OffsetCommitRequiredAcksDoc = "The required acks before the commit can be accepted. In general, the default (-1) should not be overridden"
+
+
   /** ********* Sasl Configuration ****************/
   val SaslMechanismInterBrokerProtocolDoc = "SASL mechanism used for inter-broker communication. Default is GSSAPI."
   val SaslEnabledMechanismsDoc = SaslConfigs.SASL_ENABLED_MECHANISMS_DOC
@@ -319,6 +382,7 @@ object BelinkConfig {
     import ConfigDef.ValidString._
 
     new ConfigDef()
+      .define(BrokerIdProp, INT, Defaults.BrokerId, HIGH, BrokerIdDoc)
       .define(MaxConnectionsPerIpProp, INT, Defaults.MaxConnectionsPerIp, atLeast(1), MEDIUM, MaxConnectionsPerIpDoc)
       .define(MaxConnectionsPerIpOverridesProp, STRING, Defaults.MaxConnectionsPerIpOverrides, MEDIUM, MaxConnectionsPerIpOverridesDoc)
       .define(ConnectionsMaxIdleMsProp, LONG, Defaults.ConnectionsMaxIdleMs, MEDIUM, ConnectionsMaxIdleMsDoc)
@@ -379,6 +443,21 @@ object BelinkConfig {
       .define(QuotaWindowSizeSecondsProp, INT, Defaults.QuotaWindowSizeSeconds, atLeast(1), LOW, QuotaWindowSizeSecondsDoc)
       .define(ReplicationQuotaWindowSizeSecondsProp, INT, Defaults.ReplicationQuotaWindowSizeSeconds, atLeast(1), LOW, ReplicationQuotaWindowSizeSecondsDoc)
 
+
+      .define(ControllerSocketTimeoutMsProp, INT, Defaults.ControllerSocketTimeoutMs, MEDIUM, ControllerSocketTimeoutMsDoc)
+      .define(DefaultReplicationFactorProp, INT, Defaults.DefaultReplicationFactor, MEDIUM, DefaultReplicationFactorDoc)
+
+      /** ********* Offset management configuration ***********/
+      .define(OffsetMetadataMaxSizeProp, INT, Defaults.OffsetMetadataMaxSize, HIGH, OffsetMetadataMaxSizeDoc)
+      .define(OffsetsLoadBufferSizeProp, INT, Defaults.OffsetsLoadBufferSize, atLeast(1), HIGH, OffsetsLoadBufferSizeDoc)
+      .define(OffsetsTopicReplicationFactorProp, SHORT, Defaults.OffsetsTopicReplicationFactor, atLeast(1), HIGH, OffsetsTopicReplicationFactorDoc)
+      .define(OffsetsTopicPartitionsProp, INT, Defaults.OffsetsTopicPartitions, atLeast(1), HIGH, OffsetsTopicPartitionsDoc)
+      .define(OffsetsTopicSegmentBytesProp, INT, Defaults.OffsetsTopicSegmentBytes, atLeast(1), HIGH, OffsetsTopicSegmentBytesDoc)
+      .define(OffsetsTopicCompressionCodecProp, INT, Defaults.OffsetsTopicCompressionCodec, HIGH, OffsetsTopicCompressionCodecDoc)
+      .define(OffsetsRetentionMinutesProp, INT, Defaults.OffsetsRetentionMinutes, atLeast(1), HIGH, OffsetsRetentionMinutesDoc)
+      .define(OffsetsRetentionCheckIntervalMsProp, LONG, Defaults.OffsetsRetentionCheckIntervalMs, atLeast(1), HIGH, OffsetsRetentionCheckIntervalMsDoc)
+      .define(OffsetCommitTimeoutMsProp, INT, Defaults.OffsetCommitTimeoutMs, atLeast(1), HIGH, OffsetCommitTimeoutMsDoc)
+      .define(OffsetCommitRequiredAcksProp, SHORT, Defaults.OffsetCommitRequiredAcks, HIGH, OffsetCommitRequiredAcksDoc)
   }
 
   def fromProps(props: Properties): BelinkConfig =
@@ -404,12 +483,11 @@ class BelinkConfig(val props: java.util.Map[_, _], doLog: Boolean) extends Abstr
   val maxConnectionsPerIp = getInt(BelinkConfig.MaxConnectionsPerIpProp)
   val maxConnectionsPerIpOverrides: Map[String, Int] =
     getMap(BelinkConfig.MaxConnectionsPerIpOverridesProp, getString(BelinkConfig.MaxConnectionsPerIpOverridesProp)).map { case (k, v) => (k, v.toInt)}
-
   val connectionsMaxIdleMs = getLong(BelinkConfig.ConnectionsMaxIdleMsProp)
-
   val queuedMaxRequests = getInt(BelinkConfig.QueuedMaxRequestsProp)
-
   val numNetworkThreads = getInt(BelinkConfig.NumNetworkThreadsProp)
+
+  var brokerId: Int = getInt(BelinkConfig.BrokerIdProp)
 
 
   /************* Authorizer Configuration ***********/
@@ -445,7 +523,6 @@ class BelinkConfig(val props: java.util.Map[_, _], doLog: Boolean) extends Abstr
   val transactionIdExpirationMs = getInt(BelinkConfig.TransactionalIdExpirationMsProp)
   val numRecoveryThreadsPerDataDir = getInt(BelinkConfig.NumRecoveryThreadsPerDataDirProp)
 
-
   val logSegmentBytes = getInt(BelinkConfig.LogSegmentBytesProp)
   val logRollTimeMillis: java.lang.Long = Option(getLong(BelinkConfig.LogRollTimeMillisProp)).getOrElse(60 * 60 * 1000L * getInt(BelinkConfig.LogRollTimeHoursProp))
 
@@ -463,11 +540,25 @@ class BelinkConfig(val props: java.util.Map[_, _], doLog: Boolean) extends Abstr
   /** ***** block chain configuration ****** **/
   val blockchainSyncInterval = getLong(BelinkConfig.BlockchainSyncIntervalProp)
 
+  /** ********* Replication configuration ***********/
+  val controllerSocketTimeoutMs: Int = getInt(BelinkConfig.ControllerSocketTimeoutMsProp)
+  val defaultReplicationFactor: Int = getInt(BelinkConfig.DefaultReplicationFactorProp)
+
   val listeners: Seq[EndPoint] = getListeners
 
   val saslEnabledMechanisms = getList(BelinkConfig.SaslEnabledMechanismsProp)
 
   val fetchPurgatoryPurgeIntervalRequests = getInt(BelinkConfig.FetchPurgatoryPurgeIntervalRequestsProp)
+
+  /** ********* Offset management configuration ***********/
+  val offsetMetadataMaxSize = getInt(BelinkConfig.OffsetMetadataMaxSizeProp)
+  val offsetsLoadBufferSize = getInt(BelinkConfig.OffsetsLoadBufferSizeProp)
+  val offsetsTopicReplicationFactor = getShort(BelinkConfig.OffsetsTopicReplicationFactorProp)
+  val offsetsTopicPartitions = getInt(BelinkConfig.OffsetsTopicPartitionsProp)
+  val offsetCommitTimeoutMs = getInt(BelinkConfig.OffsetCommitTimeoutMsProp)
+  val offsetCommitRequiredAcks = getShort(BelinkConfig.OffsetCommitRequiredAcksProp)
+  val offsetsTopicSegmentBytes = getInt(BelinkConfig.OffsetsTopicSegmentBytesProp)
+  val offsetsTopicCompressionCodec = Option(getInt(BelinkConfig.OffsetsTopicCompressionCodecProp)).map(value => CompressionCodec.getCompressionCodec(value)).orNull
 
   private[belink] lazy val listenerSecurityProtocolMap = getListenerSecurityProtocolMap
 

@@ -75,20 +75,20 @@ class BelinkServer(val config: BelinkConfig, time: Time = Time.SYSTEM,
   var requestHandlerPool: BelinkRequestHandlerPool = null
 
   var logManager: LogManager = null
-
   var quotaManagers: QuotaFactory.QuotaManagers = null
-
   var replicaManager: ReplicaManager = null
-
   var blockChainManager: BlockChainManager = null
-
   var credentialProvider: CredentialProvider = null
-
   var authorizer: Option[Authorizer] = None
 
-  private var _brokerTopicStats: BrokerTopicStats = null
 
+  var metadataCache: MetadataCache = null
+
+  private var _brokerTopicStats: BrokerTopicStats = null
   private[belink] def brokerTopicStats = _brokerTopicStats
+
+  private var _clusterId: String = null
+  def clusterId: String = _clusterId
 
   def startup(): Unit = {
     try {
@@ -110,6 +110,8 @@ class BelinkServer(val config: BelinkConfig, time: Time = Time.SYSTEM,
 
         /* register broker metrics */
         _brokerTopicStats = new BrokerTopicStats
+
+        _clusterId = "test"
 
         metrics = new Metrics(metricConfig, reporters, time, true)
         quotaManagers = QuotaFactory.instantiate(config, metrics, time)
@@ -135,9 +137,10 @@ class BelinkServer(val config: BelinkConfig, time: Time = Time.SYSTEM,
           authZ.configure(config.originals())
           authZ
         }
+        metadataCache = new MetadataCache(config.brokerId)
 
         /* start processing requests */
-        apis = new BelinkApis(socketServer.requestChannel, replicaManager, authorizer, config, quotaManagers, time)
+        apis = new BelinkApis(socketServer.requestChannel, replicaManager, authorizer, config, metadataCache, quotaManagers, clusterId, time)
         requestHandlerPool = new BelinkRequestHandlerPool(socketServer.requestChannel, apis, time,
           config.numIoThreads)
 
